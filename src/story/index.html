@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Agent Wrapped</title>
+<style>
+/*FONTS*/
+:root {
+  --plate: #2B2FD9;
+  --ink: #F4EEE2;
+  --cap: #F4EEE2;
+  --legend: #2B2FD9;
+  --side: #BFB49B;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--plate);
+  color: var(--ink);
+  font-family: "Newsreader", Georgia, serif;
+  transition: background-color .5s ease;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  font: 600 15px/1 "Unbounded", system-ui, sans-serif;
+  color: var(--legend);
+  background: var(--cap);
+  border: 0;
+  border-radius: 12px;
+  padding: 14px 18px 16px;
+  box-shadow: 0 5px 0 var(--side);
+  cursor: pointer;
+  transition: transform .06s, box-shadow .06s;
+}
+button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--side); }
+button:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+button[aria-pressed="false"] { opacity: .55; }
+
+.player {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.frame {
+  position: relative;
+  height: min(100dvh, calc(100vw * 16 / 9));
+  aspect-ratio: 9 / 16;
+}
+canvas#stage { width: 100%; height: 100%; display: block; touch-action: manipulation; user-select: none; }
+.bars {
+  position: absolute; top: 14px; left: 16px; right: 16px;
+  display: flex; gap: 6px; pointer-events: none;
+}
+.bars span { flex: 1; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 28%, transparent); overflow: hidden; }
+.bars i { display: block; height: 100%; width: 0; background: var(--ink); }
+.controls { position: absolute; top: 30px; right: 16px; display: flex; gap: 10px; }
+.controls button { padding: 10px 12px 12px; font-size: 12px; }
+
+.start {
+  position: absolute; inset: 0;
+  display: grid; place-items: end center;
+  padding-bottom: 12%;
+}
+.start button { font-size: 20px; padding: 22px 30px 24px; box-shadow: 0 8px 0 var(--side); }
+.start p { margin: 14px 0 0; text-align: center; font-style: italic; font-size: 17px; }
+
+.share {
+  position: fixed; inset: 0; overflow-y: auto;
+  padding: 40px 16px 64px;
+  display: none;
+}
+.share.open { display: block; }
+.share-inner { max-width: 980px; margin: 0 auto; }
+.share h1 { font: 800 clamp(28px, 5vw, 44px)/1.1 "Unbounded", system-ui, sans-serif; margin: 0 0 10px; }
+.share .lede { font-size: 19px; margin: 0 0 28px; max-width: 60ch; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; margin-bottom: 32px; }
+.card { display: flex; flex-direction: column; gap: 10px; }
+.card img { width: 100%; aspect-ratio: 9 / 16; border-radius: 14px; display: block; transition: opacity .2s; }
+.card.hidden img { opacity: .25; }
+.card button { font-size: 12px; padding: 10px 10px 12px; }
+.actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+.status { font-style: italic; font-size: 17px; min-height: 1.4em; margin: 18px 0 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+<main class="player" id="player">
+  <div class="frame" id="frame">
+    <canvas id="stage" width="1080" height="1920" aria-hidden="true"></canvas>
+    <div class="bars" id="bars"></div>
+    <div class="controls">
+      <button id="sound" aria-pressed="true">Sound on</button>
+      <button id="skip">Skip to sharing</button>
+    </div>
+    <div class="start" id="start">
+      <div>
+        <button id="play">Play my story</button>
+        <p>Sound on for the full effect. Tap the right side to go on, the left to go back.</p>
+      </div>
+    </div>
+  </div>
+  <p class="sr-only" aria-live="polite" id="live"></p>
+</main>
+
+<section class="share" id="share" aria-labelledby="share-title">
+  <div class="share-inner">
+    <h1 id="share-title" tabindex="-1">Pick what you share</h1>
+    <p class="lede">Every card was made on this computer from your own logs. Hide any card you'd rather keep to yourself, then save images or a video.</p>
+    <div class="cards" id="cards"></div>
+    <div class="actions">
+      <button id="save-images">Save images</button>
+      <button id="save-video">Save video</button>
+      <button id="replay">Watch again</button>
+    </div>
+    <p class="status" id="status" role="status"></p>
+  </div>
+</section>
+
+<script type="application/json" id="data">/*DATA*/</script>
+<script>
+/*SCRIPT*/
+</script>
+</body>
+</html>

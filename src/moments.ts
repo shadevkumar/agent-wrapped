@@ -1,7 +1,7 @@
 import { localDay } from "./files.ts";
 import { apiCost, PRICES_AS_OF, type Cost } from "./pricing.ts";
 import { usageTokens, type Agent, type Harvest, type Prompt } from "./types.ts";
-import { findTypos, tokenize, Words, type TypoFamily } from "./words.ts";
+import { findTypos, keySlips, tokenize, Words, type KeySlips, type TypoFamily } from "./words.ts";
 
 // The shareable result. Every string in here came through `Words.safeQuote`
 // or is a number, a date, a model name or a word list we wrote ourselves.
@@ -30,6 +30,9 @@ export interface Wrapped {
     topPrompts: { text: string; count: number }[];
     catchphrases: { text: string; sessions: number }[];
     typos: TypoFamily[];
+    typoCount: number; // every mistyped word, all families
+    topTypo: { spelling: string; word: string; count: number } | null;
+    keySlips: KeySlips;
     shortShare: number; // prompts of three words or fewer
     medianWords: number;
     pastedShare: number; // prompts that include text pasted into other prompts
@@ -108,6 +111,9 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
       topPrompts: topPrompts(canonPrompts, words, canonical),
       catchphrases: catchphrases(prompts, canonPrompts, pasted, words, canonical),
       typos: families.slice(0, 10),
+      typoCount: families.reduce((s, f) => s + f.total, 0),
+      topTypo: topTypo(families),
+      keySlips: keySlips(families),
       shortShare: share(tokenized.filter((t) => t.length > 0 && t.length <= 3).length, prompts.length),
       medianWords: lengths[Math.floor(lengths.length / 2)] ?? 0,
       pastedShare: share(pasted.filter((flags) => flags.some(Boolean)).length, prompts.length),
@@ -263,6 +269,14 @@ function catchphrases(
       return safe ? [{ text: safe, sessions }] : [];
     })
     .slice(0, 10);
+}
+
+function topTypo(families: TypoFamily[]): Wrapped["voice"]["topTypo"] {
+  let best: Wrapped["voice"]["topTypo"] = null;
+  for (const f of families) {
+    for (const s of f.spellings) if (!best || s.count > best.count) best = { spelling: s.spelling, word: f.word, count: s.count };
+  }
+  return best;
 }
 
 // The same message sent again in the same session within two minutes.

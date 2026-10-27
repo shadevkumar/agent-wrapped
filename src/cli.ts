@@ -1,53 +1,51 @@
 #!/usr/bin/env node
-import { homedir } from "node:os";
-import { computeWrapped, type Wrapped } from "./moments.ts";
+import { spawn } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join } from "node:path";
+import { buildHtml } from "./build.ts";
+import { localDay } from "./files.ts";
+import { templateLetter, writeLetter } from "./letter.ts";
+import { computeWrapped } from "./moments.ts";
+import { pickPersonality } from "./personality.ts";
 import { harvestClaude } from "./sources/claude.ts";
 import { harvestCodex } from "./sources/codex.ts";
+import { storyData } from "./story.ts";
 import { mergeHarvests } from "./types.ts";
 
-// Day 1: print what the story will be built from. Day 2 turns it into slides.
+const args = new Set(process.argv.slice(2));
 const home = homedir();
+
+console.log("Reading your Claude Code and Codex logs. Nothing leaves this computer.");
 const wrapped = computeWrapped(mergeHarvests([harvestClaude(home), harvestCodex(home)]));
 
-if (process.argv.includes("--json")) {
+if (args.has("--json")) {
   console.log(JSON.stringify(wrapped, null, 2));
-} else {
-  console.log(summary(wrapped));
+  process.exit(0);
+}
+if (wrapped.totals.prompts === 0) {
+  console.log("No Claude Code or Codex prompts found on this computer, so there's no story yet.");
+  process.exit(1);
 }
 
-function summary(w: Wrapped): string {
-  const n = (x: number) => x.toLocaleString("en-US");
-  const usd = (x: number) => `$${Math.round(x).toLocaleString("en-US")}`;
-  const pct = (x: number) => `${Math.round(x * 100)}%`;
-  const lines = [
-    `Agent Wrapped (${w.totals.firstDay} to ${w.totals.lastDay})`,
-    "",
-    `${n(w.totals.prompts)} prompts over ${n(w.totals.activeDays)} days, ${n(w.totals.sessions)} sessions`,
-    `Claude ${pct(w.loyalty.claudeShare)} · Codex ${pct(w.loyalty.codexShare)} · both on ${w.loyalty.bothAgentDays} days`,
-    `Your agents worked ${n(w.totals.agentHours)} hours and used ${n(w.totals.tokens)} tokens`,
-    `API value: at least ${usd(w.cost.atLeastUsd)} (exact part ${usd(w.cost.exactUsd)}, prices as of ${w.cost.pricesAsOf})`,
-    w.cost.unpricedModels.length ? `  not priced: ${w.cost.unpricedModels.join(", ")}` : "",
-    "",
-    `Longest streak: ${w.rhythm.longestStreak?.days ?? 0} days (${w.rhythm.longestStreak?.from} to ${w.rhythm.longestStreak?.to})`,
-    `Busiest day: ${w.rhythm.busiestDay?.day} with ${w.rhythm.busiestDay?.prompts} prompts`,
-    `After midnight: ${n(w.rhythm.lateNight.prompts)} prompts, latest at ${w.rhythm.lateNight.latest ?? "never"}`,
-    "",
-    `Short prompts (3 words or fewer): ${pct(w.voice.shortShare)} · median ${w.voice.medianWords} words`,
-    `Prompts with pasted text: ${pct(w.voice.pastedShare)}`,
-    `Sent the same message twice: ${n(w.voice.doubleSends)} times`,
-    `Words: ${Object.entries(w.voice.lexicon).map(([k, v]) => `${k} ${v}`).join(" · ")}`,
-    "",
-    "Top prompts:",
-    ...w.voice.topPrompts.map((p) => `  ${p.count}× "${p.text}"`),
-    "",
-    "Catchphrases:",
-    ...w.voice.catchphrases.map((p) => `  "${p.text}" in ${p.sessions} sessions`),
-    "",
-    "Typos:",
-    ...w.voice.typos.map((t) => `  ${t.word}: ${t.spellings.map((s) => `${s.spelling} (${s.count})`).join(", ")}`),
-    "",
-    "Coverage:",
-    ...w.coverage.map((c) => `  ${c.agent} ${c.source}: ${n(c.count)} (${c.from ?? "-"} to ${c.to ?? "-"})`),
-  ];
-  return lines.filter((l, i) => l !== "" || lines[i - 1] !== "").join("\n");
+const personality = pickPersonality(wrapped);
+let letter;
+if (args.has("--no-ai")) {
+  letter = { text: templateLetter(wrapped, personality), by: "template" as const };
+} else {
+  console.log("Asking your Claude to write you a letter. It sees your stats only, never your prompts.");
+  letter = writeLetter(wrapped, personality);
+  if (letter.by === "template") console.log("Claude wasn't available, so your agents wrote a shorter note instead.");
+}
+
+const dir = join(tmpdir(), "agent-wrapped");
+mkdirSync(dir, { recursive: true });
+const file = join(dir, `agent-wrapped-${localDay(new Date())}.html`);
+writeFileSync(file, buildHtml(storyData(wrapped, personality, letter)));
+
+console.log(`\nYou are ${personality.name}. ${wrapped.totals.prompts.toLocaleString("en-US")} prompts, ${Math.round(wrapped.totals.agentHours)} hours of agent work.`);
+console.log(`Your story is ready: ${file}`);
+if (!args.has("--no-open")) {
+  const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
+  spawn(opener, [file], { detached: true, stdio: "ignore" }).unref();
 }

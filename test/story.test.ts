@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { buildHtml } from "../src/build.ts";
+import { templateLetter, writeLetter } from "../src/letter.ts";
+import { computeWrapped, type Wrapped } from "../src/moments.ts";
+import { pickPersonality } from "../src/personality.ts";
+import { pickCatchphrase, storyData } from "../src/story.ts";
+import { emptyHarvest } from "../src/types.ts";
+import { Words } from "../src/words.ts";
+
+function wrappedWith(prompts: string[], hourUtc = 14): Wrapped {
+  const h = emptyHarvest();
+  prompts.forEach((text, i) =>
+    h.prompts.push({ agent: "codex", text, at: new Date(Date.UTC(2026, 9, 1 + (i % 20), hourUtc, i % 60)), session: `s${i % 7}` }),
+  );
+  return computeWrapped(h, new Words([], new Set("ok next fix it make sure nothing breaks".split(" "))));
+}
+
+test("the catchphrase skips phrases everyone types", () => {
+  const picked = pickCatchphrase([
+    { text: "let me know", sessions: 100 },
+    { text: "can you check", sessions: 90 },
+    { text: "one by one", sessions: 80 },
+  ]);
+  assert.equal(picked?.text, "one by one");
+  assert.equal(pickCatchphrase([{ text: "tell me what", sessions: 5 }]), null);
+});
+
+test("cards with too little behind them are left out", () => {
+  const w = wrappedWith(["ok next", "fix it", "ok next"]);
+  const d = storyData(w, pickPersonality(w), { text: "hi", by: "template" });
+  assert.equal(d.topTypo, null);
+  assert.equal(d.spellings, null);
+  assert.equal(d.night, null); // all prompts in the afternoon
+  assert.equal(d.streak, null);
+  assert.equal(d.money, null);
+});
+
+test("late nights pick the Midnight Foreman", () => {
+  const w = wrappedWith(Array.from({ length: 40 }, () => "make sure nothing breaks"), 2);
+  assert.equal(pickPersonality(w).name, "The Midnight Foreman");
+});
+
+test("without the Claude CLI, the template letter is used", () => {
+  const w = wrappedWith(["ok next", "ok next", "ok next", "fix it"]);
+  const p = pickPersonality(w);
+  const path = process.env.PATH;
+  process.env.PATH = "/nonexistent";
+  try {
+    const letter = writeLetter(w, p);
+    assert.equal(letter.by, "template");
+    assert.equal(letter.text, templateLetter(w, p));
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
+test("text in the data can't break out of the page's script tag", () => {
+  const w = wrappedWith(["ok next"]);
+  const html = buildHtml(storyData(w, pickPersonality(w), { text: '</script><script>alert(1)</script>', by: "claude" }));
+  assert.ok(!html.includes("<script>alert(1)"));
+  assert.ok(html.includes("\\u003c/script>\\u003cscript>alert(1)"));
+});
+
+test("the finished page holds no private detail from the logs", () => {
+  const h = emptyHarvest();
+  h.privateNames.add("acmecorp");
+  const secrets = ["Zentrix", "jane@acmecorp.com", "sk-ant-api03-SECRET99", "/Users/me/acmecorp/app.py", "acmecorp"];
+  for (let s = 0; s < 6; s++) {
+    ["ok check Zentrix", "mail jane@acmecorp.com", "use sk-ant-api03-SECRET99", "fix /Users/me/acmecorp/app.py", "acmecorp next", "ok next"].forEach(
+      (text, i) => h.prompts.push({ agent: "claude", text, at: new Date(1_790_000_000_000 + s * 9e7 + i * 1000), session: `s${s}` }),
+    );
+  }
+  const w = computeWrapped(h, new Words(h.privateNames, new Set("ok check mail use fix next".split(" "))));
+  const p = pickPersonality(w);
+  const html = buildHtml(storyData(w, p, { text: templateLetter(w, p), by: "template" }));
+  const data = html.slice(html.indexOf('id="data">'), html.indexOf("</script>", html.indexOf('id="data">')));
+  for (const secret of secrets) assert.ok(!data.toLowerCase().includes(secret.toLowerCase()), `leaked: ${secret}`);
+  assert.ok(data.includes("ok next"));
+});

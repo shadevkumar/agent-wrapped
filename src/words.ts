@@ -14,7 +14,9 @@ const MODERN = new Set(
     "prod staging commit commits merge merged push pushed test tests tested lint debug debugging " +
     "dashboard dashboards workflow workflows feature features screenshot screenshots tab tabs " +
     "chat chats chatbot bot bots ai llm prompt prompts token tokens model models agent agents " +
-    "data database json url urls link links laptop smartphone video videos google"
+    "data database json url urls link links laptop smartphone video videos " +
+    "async await sync config configs env auth oauth cli npm yaml regex cron webhook webhooks " +
+    "param params args arg enum const func init pre repo localhost wifi admin"
   ).split(" "),
 );
 
@@ -135,41 +137,85 @@ function adjacentKeys(a: string, b: string): boolean {
   return Math.abs(pa[0] - pb[0]) <= 1 && Math.abs(pa[1] - pb[1]) <= 1;
 }
 
-// True when `typed` is `intended` with one slip of the fingers: two letters
+export type Slip =
+  | { kind: "neighbour"; meant: string; hit: string }
+  | { kind: "swap" }
+  | { kind: "missed"; meant: string }
+  | { kind: "extra"; hit: string };
+
+// How `typed` is `intended` with one slip of the fingers: two letters
 // swapped, a neighbouring key hit instead, a letter missed, or a stray
 // neighbouring/doubled key added. Other one-letter differences are usually
-// different words ("code" / "codex"), so they don't count.
-export function isFingerSlip(intended: string, typed: string): boolean {
-  if (intended === typed) return false;
+// different words ("code" / "codex"), so they return null.
+export function fingerSlip(intended: string, typed: string): Slip | null {
+  if (intended === typed) return null;
   const a = intended;
   const b = typed;
   if (a.length === b.length) {
     const diff: number[] = [];
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) diff.push(i);
-    if (diff.length === 1) return a.length >= 4 && adjacentKeys(a[diff[0]!]!, b[diff[0]!]!);
+    if (diff.length === 1) {
+      const meant = a[diff[0]!]!;
+      const hit = b[diff[0]!]!;
+      return a.length >= 4 && adjacentKeys(meant, hit) ? { kind: "neighbour", meant, hit } : null;
+    }
     if (diff.length === 2) {
       const [i, j] = diff as [number, number];
-      return j === i + 1 && a[i] === b[j] && a[j] === b[i];
+      return j === i + 1 && a[i] === b[j] && a[j] === b[i] ? { kind: "swap" } : null;
     }
-    return false;
+    return null;
   }
+  if (a.length < 4) return null;
   if (b.length === a.length - 1) {
-    if (a.length < 4) return false;
-    for (let i = 0; i < a.length; i++) if (a.slice(0, i) + a.slice(i + 1) === b) return true;
-    return false;
+    for (let i = 0; i < a.length; i++) if (a.slice(0, i) + a.slice(i + 1) === b) return { kind: "missed", meant: a[i]! };
+    return null;
   }
   if (b.length === a.length + 1) {
-    if (a.length < 4) return false;
     for (let i = 0; i < b.length; i++) {
       if (b.slice(0, i) + b.slice(i + 1) !== a) continue;
-      const extra = b[i]!;
+      const hit = b[i]!;
       const left = b[i - 1];
       const right = b[i + 1];
-      if (extra === left || extra === right) return true;
-      if ((left && adjacentKeys(extra, left)) || (right && adjacentKeys(extra, right))) return true;
+      if (hit === left || hit === right) return { kind: "extra", hit };
+      if ((left && adjacentKeys(hit, left)) || (right && adjacentKeys(hit, right))) return { kind: "extra", hit };
     }
   }
-  return false;
+  return null;
+}
+
+export function isFingerSlip(intended: string, typed: string): boolean {
+  return fingerSlip(intended, typed) !== null;
+}
+
+export interface KeySlips {
+  // Neighbouring-key mistakes, most common first: meant "p", hit "o".
+  neighbours: { meant: string; hit: string; count: number }[];
+  swaps: number;
+  missed: number;
+  extra: number;
+}
+
+// Adds up every slip inside the typo families, weighted by how often each spelling was typed.
+export function keySlips(families: TypoFamily[]): KeySlips {
+  const pairs = new Map<string, number>();
+  const out: KeySlips = { neighbours: [], swaps: 0, missed: 0, extra: 0 };
+  for (const fam of families) {
+    for (const { spelling, count } of fam.spellings) {
+      const slip = fingerSlip(fam.word, spelling);
+      if (!slip) continue;
+      if (slip.kind === "neighbour") {
+        const key = slip.meant + slip.hit;
+        pairs.set(key, (pairs.get(key) ?? 0) + count);
+      } else if (slip.kind === "swap") out.swaps += count;
+      else if (slip.kind === "missed") out.missed += count;
+      else out.extra += count;
+    }
+  }
+  out.neighbours = [...pairs]
+    .map(([k, count]) => ({ meant: k[0]!, hit: k[1]!, count }))
+    .sort((x, y) => y.count - x.count)
+    .slice(0, 5);
+  return out;
 }
 
 // Groups unknown spellings under the common word they were meant to be.
