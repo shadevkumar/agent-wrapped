@@ -1,0 +1,20 @@
+{
+  "name": "agent-wrapped",
+  "version": "0.1.0",
+  "description": "Your life with AI coding agents, wrapped. Reads Claude Code and Codex logs on your Mac. Nothing is uploaded.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --disable-warning=ExperimentalWarning src/cli.ts",
+    "test": "TZ=UTC node --test --disable-warning=ExperimentalWarning 'test/**/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}
