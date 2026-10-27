@@ -1,0 +1,68 @@
+# Agent Wrapped
+
+Your life with AI coding agents, wrapped.
+
+```
+npx agent-wrapped
+```
+
+It reads your Claude Code and Codex logs on your computer and turns them into a short animated story made of keyboard keys: your most-typed typo, every way you've spelled "everything", the key you hit when you meant another, your latest prompt after midnight, your streak, and what all that agent work would cost at public API prices. It ends with your personality and a letter from your agents.
+
+Then you pick which cards to keep and save them as images or a video.
+
+## What stays private
+
+Nothing is uploaded. The story is one HTML file written to your computer's temp folder and opened in your browser.
+
+- **Your prompts never leave your computer.** The story only quotes everyday words. A quote with a name, a link, a file path, an email, a key or a word the dictionary doesn't know is left out, and so are your folder, repo and organisation names.
+- **You see every card before you share it,** and you can hide any of them.
+- **The letter** is written by your own `claude` command, if you have one. It gets your numbers and a few quotes that passed the same privacy check as the cards, never your prompts or logs. It doesn't save a session or load any project files. Run with `--no-ai` to use a template letter instead.
+
+## What it reads
+
+| Agent | Where | What |
+| --- | --- | --- |
+| Claude Code | `~/.claude/history.jsonl` | the prompts you typed |
+| Claude Code | `~/.claude/projects/**/*.jsonl` | token use and how long each request took |
+| Claude Code | `~/.claude/stats-cache.json` | older token totals |
+| Codex | `~/.codex/thread_history_*.sqlite` | the prompts you typed and how long each request took |
+| Codex | `~/.codex/state_*.sqlite` | token totals per thread |
+| Codex | `~/.codex/sessions/**/*.jsonl` | token splits for recent threads |
+
+Everything is opened read-only. Claude Code deletes full transcripts after about 30 days, so older Claude token use can be missing. The prompts themselves go back further.
+
+## How the cost is worked out
+
+"At least $X" is what the same tokens would cost on the public Claude and OpenAI APIs, at standard rates.
+
+- Tokens with a full split (input, cached, written to cache, output) are priced exactly.
+- Tokens known only as one total, like older Codex threads, are priced as if they were all the cheapest kind. The real cost is higher, which is why it says "at least".
+- Models without a public price are counted but not priced.
+
+Prices are in `src/pricing.ts`, with the date they were read and their source pages. Your plan most likely cost far less.
+
+## Options
+
+| Flag | What it does |
+| --- | --- |
+| `--no-ai` | Use a template letter instead of asking your `claude` command |
+| `--no-open` | Write the story file without opening it |
+| `--json` | Print the numbers behind the story instead of making it |
+
+## Needs
+
+- Node.js 24 or newer
+- Claude Code, Codex, or both, used on this computer
+- macOS is where it's tested. It uses the system dictionary in `/usr/share/dict/words` to tell typos from words; without one, quotes are mostly left out.
+
+## Develop
+
+```
+npm install
+npm test
+npm run dev
+```
+
+## Credits
+
+Fonts: [Unbounded](https://github.com/googlefonts/unbounded) and [Newsreader](https://github.com/productiontype/Newsreader), both under the SIL Open Font License 1.1.
