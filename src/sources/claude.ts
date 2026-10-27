@@ -44,8 +44,11 @@ export function harvestClaude(home: string): Harvest {
   // usage, and copies history into resumed sessions. Count each reply once.
   const replies = new Map<string, Usage>();
   const turnIds = new Set<string>();
+  // Only replies and turn timings matter here; tool output and attachments,
+  // most of each file, are skipped without being decoded.
+  const relevant = (line: string) => line.includes('"type":"assistant"') || line.includes('"turn_duration"');
   for (const file of findFiles(join(root, "projects"), ".jsonl")) {
-    for (const row of readJsonl(file)) {
+    for (const row of readJsonl(file, relevant)) {
       if (typeof row.cwd === "string") addNames(h, namesFromPath(row.cwd));
       const at = toDate(row.timestamp);
       if (!at || (statsDay && localDay(at) <= statsDay)) continue;

@@ -1,13 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Coverage, Agent } from "./types.ts";
 
 // Parse a JSONL file, skipping malformed lines. A missing file is empty.
-export function readJsonl(path: string): Record<string, any>[] {
+// `keep` skips decoding lines that can't matter, which is most of a big log.
+export function readJsonl(path: string, keep?: (line: string) => boolean): Record<string, any>[] {
   if (!existsSync(path)) return [];
   const rows: Record<string, any>[] = [];
   for (const line of readFileSync(path, "utf8").split("\n")) {
-    if (!line.trim()) continue;
+    if (!line.trim() || (keep && !keep(line))) continue;
     try {
       const row = JSON.parse(line);
       if (row && typeof row === "object") rows.push(row);
@@ -16,6 +17,46 @@ export function readJsonl(path: string): Record<string, any>[] {
     }
   }
   return rows;
+}
+
+// The last line containing `needle` that parses and passes `accept`, read
+// backwards from the end of the file, so a 300 MB log costs one small read.
+export function lastJsonLine(
+  path: string,
+  needle: string,
+  accept: (row: Record<string, any>) => boolean,
+): Record<string, any> | null {
+  if (!existsSync(path)) return null;
+  const fd = openSync(path, "r");
+  try {
+    const chunk = 1 << 20;
+    let end = fstatSync(fd).size;
+    let tail = Buffer.alloc(0);
+    while (end > 0) {
+      const start = Math.max(0, end - chunk);
+      const buf = Buffer.alloc(end - start);
+      readSync(fd, buf, 0, buf.length, start);
+      tail = Buffer.concat([buf, tail]);
+      end = start;
+      // Until the start of the file, the first line may be cut in half. Split
+      // on bytes, so a character cut at the chunk edge is never decoded.
+      const firstBreak = end > 0 ? tail.indexOf(0x0a) : -1;
+      const lines = tail.subarray(firstBreak + 1).toString("utf8").split("\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (!lines[i]!.includes(needle)) continue;
+        try {
+          const row = JSON.parse(lines[i]!);
+          if (row && accept(row)) return row;
+        } catch {
+          // A half-written last line while the agent runs.
+        }
+      }
+      tail = firstBreak >= 0 ? tail.subarray(0, firstBreak) : Buffer.alloc(0);
+    }
+    return null;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export function readJson(path: string): Record<string, any> | null {

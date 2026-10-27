@@ -4,13 +4,21 @@
   "description": "Your life with AI coding agents, wrapped. Reads Claude Code and Codex logs on your Mac. Nothing is uploaded.",
   "type": "module",
   "private": true,
+  "bin": {
+    "agent-wrapped": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
   "engines": {
     "node": ">=24"
   },
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning src/cli.ts",
     "test": "TZ=UTC node --test --disable-warning=ExperimentalWarning 'test/**/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').cpSync('src/story', 'dist/story', { recursive: true })\"",
+    "prepack": "npm run build"
   },
   "license": "MIT",
   "devDependencies": {

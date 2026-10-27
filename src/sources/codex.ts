@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { coverage, namesFromGitUrl, namesFromPath, readJsonl, toDate } from "../files.ts";
+import { coverage, lastJsonLine, namesFromGitUrl, namesFromPath, toDate } from "../files.ts";
 import { emptyHarvest, type Harvest } from "../types.ts";
 
 // Codex keeps, in ~/.codex:
@@ -102,13 +102,12 @@ function messageText(json: string): string {
 
 // The thread's final running total. `input_tokens` includes cached tokens.
 function rolloutUsage(path: string) {
-  let total: Record<string, number> | null = null;
-  for (const row of readJsonl(path)) {
-    const p = row.payload;
-    if (row.type === "event_msg" && p?.type === "token_count" && p.info?.total_token_usage) {
-      total = p.info.total_token_usage;
-    }
-  }
+  const row = lastJsonLine(
+    path,
+    '"token_count"',
+    (r) => r.type === "event_msg" && r.payload?.type === "token_count" && !!r.payload.info?.total_token_usage,
+  );
+  const total: Record<string, number> | undefined = row?.payload.info.total_token_usage;
   if (!total) return null;
   const cached = total.cached_input_tokens ?? 0;
   return {
