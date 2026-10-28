@@ -20,7 +20,6 @@
   },
   "author": "Shadev Kumar",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "bin": {
     "agent-wrapped": "dist/cli.js"
