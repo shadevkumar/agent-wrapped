@@ -8,14 +8,15 @@ npx agent-wrapped
 
 It reads your Claude Code and Codex logs on your computer and turns them into a short animated story made of keyboard keys: your most-typed typo, every way you've spelled "everything", the key you hit when you meant another, your latest prompt after midnight, your streak, and what all that agent work would cost at public API prices. It ends with your personality and a letter from your agents.
 
-Then you pick which cards to keep and save them as images or a video.
+Then you share it. One link plays your whole story for anyone who opens it, keys and sound included, and ends by showing them how to make their own. You can leave cards out first, or save a video for places that don't take links. While you watch, the buttons fade away so a screenshot shows only the card, and pressing S saves the card on screen.
 
 ## What stays private
 
 Nothing is uploaded. The story is one HTML file written to your computer's temp folder and opened in your browser.
 
 - **Your prompts never leave your computer.** The story only quotes everyday words. A quote with a name, a link, a file path, an email, a key or a word the dictionary doesn't know is left out, and so are your folder, repo and organisation names.
-- **You see every card before you share it,** and you can hide any of them.
+- **Nothing is shared until you share it.** A share link carries your story inside it, after the `#`, which browsers never send to the server. So the public page that plays it never receives or stores your story. Anyone you give the link to can watch it.
+- **You see the story before you share it,** and a card you leave out is not in the link at all.
 - **The letter** is written by your own `claude` command, if you have one. It gets your numbers and a few quotes that passed the same privacy check as the cards, never your prompts or logs. It doesn't save a session or load any project files. Run with `--no-ai` to use a template letter instead.
 
 ## What it reads
@@ -51,7 +52,7 @@ Prices are in `src/pricing.ts`, with the date they were read and their source pa
 
 ## Needs
 
-- Node.js 24 or newer
+- Node.js 22.13 or newer
 - Claude Code, Codex, or both, used on this computer
 - macOS is where it's tested. It uses the system dictionary in `/usr/share/dict/words` to tell typos from words; without one, quotes are mostly left out.
 
@@ -61,8 +62,11 @@ Prices are in `src/pricing.ts`, with the date they were read and their source pa
 npm install
 npm test
 npm run dev
+npm run build:player   # the public page that plays shared stories, in site/
 ```
+
+Share links point at `PLAYER_URL` in `src/build.ts`. The `site/` folder is what goes online: the player page, the picture posts show for a link (`og.png`, made from `og.html`), and its headers in `vercel.json`.
 
 ## Credits
 
-Fonts: [Unbounded](https://github.com/googlefonts/unbounded) and [Newsreader](https://github.com/productiontype/Newsreader), both under the SIL Open Font License 1.1.
+Fonts: [Geist](https://github.com/vercel/geist-font) and [Newsreader](https://github.com/productiontype/Newsreader), both under the SIL Open Font License 1.1.

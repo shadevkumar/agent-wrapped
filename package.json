@@ -1,9 +1,20 @@
 {
   "name": "agent-wrapped",
   "version": "0.1.0",
-  "description": "Your life with AI coding agents, wrapped. Reads Claude Code and Codex logs on your Mac. Nothing is uploaded.",
-  "type": "module",
+  "description": "Your year with AI coding agents, played back in keyboard keys. Reads Claude Code and Codex logs on your computer.",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "ai",
+    "wrapped",
+    "year-in-review",
+    "cli"
+  ],
+  "homepage": "https://agent-wrapped.shadev.space/",
+  "author": "Shadev Kumar",
+  "license": "MIT",
   "private": true,
+  "type": "module",
   "bin": {
     "agent-wrapped": "dist/cli.js"
   },
@@ -11,16 +22,16 @@
     "dist"
   ],
   "engines": {
-    "node": ">=24"
+    "node": ">=22.13"
   },
   "scripts": {
     "dev": "node --disable-warning=ExperimentalWarning src/cli.ts",
     "test": "TZ=UTC node --test --disable-warning=ExperimentalWarning 'test/**/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "build": "tsc -p tsconfig.build.json && node -e \"require('fs').cpSync('src/story', 'dist/story', { recursive: true })\"",
-    "prepack": "npm run build"
+    "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json && node -e \"require('fs').cpSync('src/story', 'dist/story', { recursive: true })\"",
+    "prepack": "npm run build",
+    "build:player": "node --disable-warning=ExperimentalWarning scripts/build-player.ts"
   },
-  "license": "MIT",
   "devDependencies": {
     "@types/node": "^26.6.5",
     "typescript": "^7.0.2"
