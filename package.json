@@ -1,5 +1,5 @@
 {
-  "name": "agent-wrapped-2026",
+  "name": "@shadevkumar/agent-wrapped",
   "version": "0.1.0",
   "description": "Your year with AI coding agents, played back in keyboard keys. Reads Claude Code and Codex logs on your computer.",
   "keywords": [
@@ -20,9 +20,12 @@
   },
   "author": "Shadev Kumar",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "bin": {
-    "agent-wrapped-2026": "dist/cli.js"
+    "agent-wrapped": "dist/cli.js"
   },
   "files": [
     "dist"

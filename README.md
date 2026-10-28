@@ -3,7 +3,7 @@
 Your life with AI coding agents, wrapped.
 
 ```
-npx agent-wrapped-2026
+npx @shadevkumar/agent-wrapped
 ```
 
 It reads your Claude Code and Codex logs on your computer and turns them into a short animated story made of keyboard keys: your most-typed typo, every way you've spelled "everything", the key you hit when you meant another, your latest prompt after midnight, your streak, and what all that agent work would cost at public API prices. It ends with your personality and a letter from your agents.
