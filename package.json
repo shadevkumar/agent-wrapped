@@ -11,6 +11,13 @@
     "cli"
   ],
   "homepage": "https://agent-wrapped.shadev.space/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shadevkumar/agent-wrapped.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shadevkumar/agent-wrapped/issues"
+  },
   "author": "Shadev Kumar",
   "license": "MIT",
   "private": true,
