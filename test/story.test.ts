@@ -62,6 +62,21 @@ test("text in the data can't break out of the page's script tag", () => {
   assert.ok(html.includes("\\u003c/script>\\u003cscript>alert(1)"));
 });
 
+test("your own story file loads nothing from the internet; only the public page counts visits", () => {
+  const w = wrappedWith(["ok next"]);
+  const own = buildHtml(storyData(w, pickPersonality(w), { text: "hi", by: "template" }));
+  assert.ok(!own.includes("_vercel") && !own.includes("og:image"));
+  assert.ok(!/src="https?:/.test(own));
+  assert.ok(buildHtml(null).includes("/_vercel/insights/script.js"));
+});
+
+test("the public player page carries no story, only where shared stories play", () => {
+  const html = buildHtml(null, "https://example.com/</script>");
+  const data = html.slice(html.indexOf('id="data">') + 10, html.indexOf("</script>", html.indexOf('id="data">')));
+  assert.equal(data, "null");
+  assert.ok(html.includes('"https://example.com/\\u003c/script>"'));
+});
+
 test("the finished page holds no private detail from the logs", () => {
   const h = emptyHarvest();
   h.privateNames.add("acmecorp");

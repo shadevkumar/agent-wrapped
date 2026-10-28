@@ -3,86 +3,148 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Agent Wrapped</title>
+<title>Agent Wrapped 2026</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='4' y='6' width='56' height='54' rx='12' fill='%23131416'/%3E%3Crect x='6' y='4' width='52' height='50' rx='11' fill='%2336383D'/%3E%3Ctext x='32' y='38' font-family='system-ui,sans-serif' font-size='26' font-weight='600' fill='%23F1F1EF' text-anchor='middle'%3EAW%3C/text%3E%3C/svg%3E">
+<!--HEAD-->
 <style>
 /*FONTS*/
 :root {
-  --plate: #2B2FD9;
-  --ink: #F4EEE2;
-  --cap: #F4EEE2;
-  --legend: #2B2FD9;
-  --side: #BFB49B;
+  --page: #141517;
+  --plate: #1D1E21;
+  --ink: #F1F1EF;
+  --soft: #A4A6AC;
+  --faint: #70737A;
+  --line: rgba(255, 255, 255, 0.09);
+  --key: #2C2E32;
+  --key-top: #36383D;
+  --key-side: #131416;
+  --lit: #E4E4E0;
+  --lit-top: #F6F6F3;
+  --lit-side: #8E8F8C;
+  color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
-  background: var(--plate);
+  background: var(--page);
   color: var(--ink);
-  font-family: "Newsreader", Georgia, serif;
-  transition: background-color .5s ease;
+  font: 400 16px/1.5 "Geist", system-ui, sans-serif;
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Buttons are low dark keys; the main action is the light key. */
 button {
-  font: 600 15px/1 "Unbounded", system-ui, sans-serif;
-  color: var(--legend);
-  background: var(--cap);
+  font: 500 14px/1 "Geist", system-ui, sans-serif;
+  color: var(--ink);
+  background: linear-gradient(var(--key-top), var(--key));
   border: 0;
-  border-radius: 12px;
-  padding: 14px 18px 16px;
-  box-shadow: 0 5px 0 var(--side);
+  border-radius: 10px;
+  padding: 11px 16px 12px;
+  box-shadow: 0 2px 0 var(--key-side), 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07);
   cursor: pointer;
-  transition: transform .06s, box-shadow .06s;
+  transition: transform .06s, box-shadow .06s, opacity .2s;
 }
-button:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--side); }
-button:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
-button[aria-pressed="false"] { opacity: .55; }
+button:active { transform: translateY(2px); box-shadow: 0 0 0 var(--key-side), 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07); }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+button:disabled { opacity: .5; cursor: default; }
+button.primary { color: var(--plate); background: linear-gradient(var(--lit-top), var(--lit)); box-shadow: 0 2px 0 var(--lit-side), 0 6px 18px rgba(0, 0, 0, 0.35); }
+button[hidden] { display: none; }
 
 .player {
   position: fixed; inset: 0;
   display: grid; place-items: center;
   padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
 }
+.player.idle { cursor: none; }
 .frame {
   position: relative;
   height: min(100dvh, calc(100vw * 16 / 9));
   aspect-ratio: 9 / 16;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0, 0, 0, 0.5);
+}
+.frame[data-shape="wide"] {
+  height: auto;
+  width: min(100vw, calc(100dvh * 16 / 9));
+  aspect-ratio: 16 / 9;
 }
 canvas#stage { width: 100%; height: 100%; display: block; touch-action: manipulation; user-select: none; }
 .bars {
   position: absolute; top: 14px; left: 16px; right: 16px;
-  display: flex; gap: 6px; pointer-events: none;
+  display: flex; gap: 4px; pointer-events: none;
 }
-.bars span { flex: 1; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 28%, transparent); overflow: hidden; }
+.bars span { flex: 1; height: 2px; border-radius: 1px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
 .bars i { display: block; height: 100%; width: 0; background: var(--ink); }
-.controls { position: absolute; top: 30px; right: 16px; display: flex; gap: 10px; }
-.controls button { padding: 10px 12px 12px; font-size: 12px; }
+.controls { position: absolute; top: 28px; right: 16px; display: flex; gap: 8px; transition: opacity .5s; }
+.controls button { padding: 9px 12px 10px; font-size: 12px; }
+.idle .controls { opacity: 0; }
+.idle .controls:focus-within { opacity: 1; }
 
-.start {
-  position: absolute; inset: 0;
-  display: grid; place-items: end center;
-  padding-bottom: 12%;
+.start { position: absolute; inset: 0; background: rgba(20, 21, 23, 0.55); }
+.start > div {
+  position: absolute; left: 16px; right: 16px; bottom: 12%;
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  text-align: center;
 }
-.start button { font-size: 20px; padding: 22px 30px 24px; box-shadow: 0 8px 0 var(--side); }
-.start p { margin: 14px 0 0; text-align: center; font-style: italic; font-size: 17px; }
+.start button { font-size: 17px; padding: 18px 28px 19px; }
+.start p { margin: 0; color: var(--soft); font-size: 15px; max-width: 36ch; }
 
-.share {
-  position: fixed; inset: 0; overflow-y: auto;
-  padding: 40px 16px 64px;
-  display: none;
+.toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 12px);
+  margin: 0; max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  border-radius: 12px;
+  background: rgba(44, 46, 50, 0.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 0 0 1px var(--line), 0 12px 32px rgba(0, 0, 0, 0.45);
+  font-size: 14px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .25s, transform .25s;
+  z-index: 10;
 }
-.share.open { display: block; }
-.share-inner { max-width: 980px; margin: 0 auto; }
-.share h1 { font: 800 clamp(28px, 5vw, 44px)/1.1 "Unbounded", system-ui, sans-serif; margin: 0 0 10px; }
-.share .lede { font-size: 19px; margin: 0 0 28px; max-width: 60ch; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; margin-bottom: 32px; }
-.card { display: flex; flex-direction: column; gap: 10px; }
-.card img { width: 100%; aspect-ratio: 9 / 16; border-radius: 14px; display: block; transition: opacity .2s; }
-.card.hidden img { opacity: .25; }
-.card button { font-size: 12px; padding: 10px 10px 12px; }
-.actions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
-.status { font-style: italic; font-size: 17px; min-height: 1.4em; margin: 18px 0 0; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+.share, .ending, .missing { position: fixed; inset: 0; overflow-y: auto; padding: 48px 16px; }
+.share-inner {
+  max-width: 1040px; min-height: 100%; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 48px; align-items: center;
+}
+.share-inner:has(img[data-shape="tall"]) { grid-template-columns: minmax(0, 340px) minmax(0, 440px); justify-content: center; }
+@media (max-width: 760px) { .share-inner, .share-inner:has(img[data-shape="tall"]) { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
+#share-preview { width: 100%; display: block; border-radius: 16px; box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0, 0, 0, 0.5); }
+#share-preview[data-shape="tall"] { max-height: 70dvh; width: auto; max-width: 100%; margin: 0 auto; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 600; letter-spacing: -0.03em; line-height: 1.05; margin: 0 0 12px; outline: none; }
+.lede { color: var(--soft); margin: 0 0 24px; max-width: 46ch; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+a.button {
+  font: 500 14px/1 "Geist", system-ui, sans-serif; color: var(--ink); text-decoration: none;
+  background: linear-gradient(var(--key-top), var(--key)); border-radius: 10px; padding: 11px 16px 12px;
+  box-shadow: 0 2px 0 var(--key-side), 0 6px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+a.button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+a.button[hidden] { display: none; }
+.choices { margin: 32px 0 0; padding: 0; border: 0; }
+.choices legend { color: var(--soft); font-size: 14px; margin-bottom: 12px; padding: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { padding: 8px 12px 9px; font-size: 13px; }
+.chip[aria-pressed="false"] { color: var(--faint); background: none; box-shadow: inset 0 0 0 1px var(--line); text-decoration: line-through; }
+.more { margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--line); }
+.note { color: var(--soft); font-size: 14px; margin: 0 0 16px; }
+.ending, .missing { display: grid; place-items: center; text-align: center; }
+.ending > div, .missing > div { max-width: 480px; }
+.ending .lede, .missing .lede { margin: 0 auto 24px; }
+.ending .row { justify-content: center; }
+code.command {
+  display: block; margin: 0 auto 20px; padding: 16px 20px; border-radius: 12px;
+  font: 500 20px/1 "Geist", ui-monospace, monospace; background: var(--key-side); box-shadow: inset 0 0 0 1px var(--line);
+}
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
@@ -92,34 +154,80 @@ canvas#stage { width: 100%; height: 100%; display: block; touch-action: manipula
     <div class="bars" id="bars"></div>
     <div class="controls">
       <button id="sound" aria-pressed="true">Sound on</button>
+      <button id="save-now">Save this card</button>
       <button id="skip">Skip to sharing</button>
     </div>
     <div class="start" id="start">
       <div>
-        <button id="play">Play my story</button>
-        <p>Sound on for the full effect. Tap the right side to go on, the left to go back.</p>
+        <button class="primary" id="play">Play my story</button>
+        <p id="start-note">Sound on for the full effect. Tap the right side to go on, the left to go back. Press S to save a card.</p>
       </div>
     </div>
   </div>
   <p class="sr-only" aria-live="polite" id="live"></p>
 </main>
 
-<section class="share" id="share" aria-labelledby="share-title">
+<section class="share" id="share" aria-labelledby="share-title" hidden>
   <div class="share-inner">
-    <h1 id="share-title" tabindex="-1">Pick what you share</h1>
-    <p class="lede">Every card was made on this computer from your own logs. Hide any card you'd rather keep to yourself, then save images or a video.</p>
-    <div class="cards" id="cards"></div>
-    <div class="actions">
-      <button id="save-images">Save images</button>
-      <button id="save-video">Save video</button>
-      <button id="replay">Watch again</button>
+    <img id="share-preview" alt="Your story's summary card">
+    <div>
+      <h1 id="share-title" tabindex="-1">Share your story</h1>
+      <p class="lede">Anyone with the link can watch it play, keys and sound included. The story travels inside the link itself, so it isn't stored anywhere.</p>
+      <p class="note" id="offline" hidden>Share links turn on once the public player page is online. For now, save the video or the card.</p>
+      <div class="row">
+        <button class="primary" id="copy-link" data-needs-link>Copy link</button>
+        <button id="share-link" hidden>Share</button>
+        <a class="button" id="post-x" target="_blank" rel="noopener" data-needs-link>Post on X</a>
+        <a class="button" id="post-linkedin" target="_blank" rel="noopener" data-needs-link>Post on LinkedIn</a>
+      </div>
+      <fieldset class="choices">
+        <legend>Cards in your story. Tap one to leave it out of the link.</legend>
+        <div class="chips" id="choices"></div>
+      </fieldset>
+      <div class="more row">
+        <button id="save-video">Save video</button>
+        <button id="save-image">Save card image</button>
+        <button data-replay>Watch again</button>
+      </div>
     </div>
-    <p class="status" id="status" role="status"></p>
   </div>
 </section>
 
+<section class="ending" id="ending" aria-labelledby="ending-title" hidden>
+  <div>
+    <h1 id="ending-title" tabindex="-1">Make your own</h1>
+    <p class="lede">Run this in your terminal. It reads your Claude Code and Codex logs on your computer, and nothing leaves it unless you share.</p>
+    <code class="command">npx agent-wrapped</code>
+    <div class="row">
+      <button class="primary" data-copy-command>Copy command</button>
+      <button data-replay>Watch again</button>
+    </div>
+  </div>
+</section>
+
+<section class="missing" id="missing" hidden>
+  <div>
+    <h1>This story didn't come through</h1>
+    <p class="lede">The link may have been cut off, or this browser may be too old to open it. Ask for the link again, or make your own with npx agent-wrapped.</p>
+  </div>
+</section>
+
+<section class="ending" id="home" aria-labelledby="home-title" hidden>
+  <div>
+    <h1 id="home-title">Agent Wrapped 2026</h1>
+    <p class="lede">Your year with Claude Code and Codex, played back in keyboard keys: your favourite typo, your latest night, your streak and a letter from your agents. Run this in your terminal. It reads your logs on your computer and nothing leaves it unless you share.</p>
+    <code class="command">npx agent-wrapped</code>
+    <div class="row">
+      <button class="primary" data-copy-command>Copy command</button>
+    </div>
+  </div>
+</section>
+
+<p class="toast" id="toast" role="status"></p>
+
 <script type="application/json" id="data">/*DATA*/</script>
-<script>
+<script type="application/json" id="player-url">/*PLAYER_URL*/</script>
+<script type="module">
 /*SCRIPT*/
 </script>
 </body>

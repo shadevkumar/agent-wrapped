@@ -45,6 +45,7 @@ writeFileSync(file, buildHtml(storyData(wrapped, personality, letter)));
 
 console.log(`\nYou are ${personality.name}. ${wrapped.totals.prompts.toLocaleString("en-US")} prompts, ${Math.round(wrapped.totals.agentHours)} hours of agent work.`);
 console.log(`Your story is ready: ${file}`);
+console.log("Watch it, then share it from the last screen. Anyone with your link can watch it play.");
 if (!args.has("--no-open")) {
   const opener = process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer" : "xdg-open";
   spawn(opener, [file], { detached: true, stdio: "ignore" }).unref();
