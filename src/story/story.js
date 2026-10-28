@@ -26,10 +26,10 @@ function notify(message, { stay = false } = {}) {
 // Wired first: the home page has no story, so the script stops early there.
 for (const btn of document.querySelectorAll("[data-copy-command]")) btn.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText("npx wrpd");
+    await navigator.clipboard.writeText("npx agent-wrapped-2026");
     notify("Copied. Paste it into your terminal.");
   } catch {
-    notify("Couldn't copy it. Type npx wrpd in your terminal.");
+    notify("Couldn't copy it. Type npx agent-wrapped-2026 in your terminal.");
   }
 });
 
@@ -269,7 +269,7 @@ function initials(name) {
 }
 
 function watermark(ctx, cw) {
-  text(ctx, { x: 0, w: shape.W }, "made with npx wrpd", shape.H - (shape === SHAPES.wide ? 84 : 124), {
+  text(ctx, { x: 0, w: shape.W }, "made with npx agent-wrapped-2026", shape.H - (shape === SHAPES.wide ? 84 : 124), {
     family: "Geist", weight: 500, size: 26, color: cw.faint, align: "center",
   });
 }
