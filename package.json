@@ -1,5 +1,5 @@
 {
-  "name": "agent-wrapped",
+  "name": "agent-wrapped-2026",
   "version": "0.1.0",
   "description": "Your year with AI coding agents, played back in keyboard keys. Reads Claude Code and Codex logs on your computer.",
   "keywords": [
@@ -22,7 +22,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "agent-wrapped": "dist/cli.js"
+    "agent-wrapped-2026": "dist/cli.js"
   },
   "files": [
     "dist"
