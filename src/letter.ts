@@ -69,8 +69,8 @@ export function templateLetter(w: Wrapped, p: Personality): string {
   const typo = w.voice.typos[0];
   const lines = [
     `${w.totals.prompts.toLocaleString("en-US")} prompts. We read every one.`,
-    top ? `Some of them just said "${top.text}". We got it every time.` : "",
-    typo ? `We also know what "${typo.spellings[0]?.spelling}" means now. It means ${typo.word}.` : "",
+    top ? `Some of them just said “${top.text}”. We got it every time.` : "",
+    typo ? `We also know what “${typo.spellings[0]?.spelling}” means now. It means ${typo.word}.` : "",
     w.rhythm.lateNight.latest ? `See you at ${w.rhythm.lateNight.latest} again soon.` : "See you tomorrow.",
     "",
     `Yours, from the other side of the prompt, your agents`,
