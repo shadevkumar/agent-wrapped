@@ -24,9 +24,9 @@ test("a story comes out of its link exactly as it went in", () => {
 
 test("a link made before a field existed still reads, without that field", () => {
   const values = toLink(SHADEVS_STORY);
-  // `shipped` is the newest field.
+  // `crashouts` is the newest field.
   const older = fromLink(values.slice(0, -1));
-  assert.equal(older.shipped, undefined);
+  assert.equal(older.crashouts, undefined);
   assert.equal(older.period, SHADEVS_STORY.period);
 });
 

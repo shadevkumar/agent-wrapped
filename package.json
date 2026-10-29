@@ -1,6 +1,6 @@
 {
   "name": "@shadevkumar/agent-wrapped",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Your year with AI coding agents, played back in keyboard keys. Reads Claude Code and Codex logs on your computer.",
   "keywords": [
     "claude-code",
@@ -43,6 +43,10 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
+    "@vercel/blob": "2.8.2",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "zod": "4.6.7"
   }
 }

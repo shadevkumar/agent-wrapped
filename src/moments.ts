@@ -40,6 +40,7 @@ export interface Wrapped {
     lexicon: Record<string, number>;
     nicknames: { word: string; count: number }[]; // what you call your agent, most first
     checkIns: number; // prompts asking "okay?" or "right?"
+    crashouts: Crashouts;
   };
   // Each agent's share of your prompts, and the days you used more than one.
   loyalty: { claudeShare: number; codexShare: number; cursorShare: number; bothAgentDays: number };
@@ -57,9 +58,16 @@ export interface Wrapped {
     pushes: number;
     prs: number; // pull requests opened
     deploys: number; // deploys and published packages
-    // The Monday-to-Sunday week with the most commits.
+    // The Monday-to-Sunday week with the most commits, up to the last day in the logs.
     biggestWeek: { from: string; to: string; commits: number } | null;
   };
+}
+
+// Prompts typed in a temper: swearing, "???", shouting, "still not working".
+export interface Crashouts {
+  count: number;
+  worstDay: { day: string; count: number } | null;
+  word: string | null; // the swear word used most, like "wtf"
 }
 
 export interface AgentStats {
@@ -90,6 +98,16 @@ const LEXICON: Record<string, string[]> = {
   wait: ["wait"],
   perfect: ["perfect", "great", "awesome", "nice"],
 };
+
+const SWEARS: [string, RegExp][] = [
+  ["wtf", /\bwtf+\b/i],
+  ["fuck", /\bfu+ck\w*/i],
+  ["shit", /\bshit\w*/i],
+  ["damn", /\bdamn\w*/i],
+  ["ffs", /\bffs\b/i],
+  ["crap", /\bcrap\b/i],
+];
+const TEMPER = /[!?]{3,}|\bwhy{3,}\b|\bwhat the hell\b|\bstill (not working|broken|failing|the same)\b|\bnot working again\b/i;
 
 const NICKNAMES = ["dude", "bro", "man", "buddy", "mate", "bhai", "boss", "chief", "fam"];
 const CHECK_IN = /\b(okay|ok|right)\s*\?/i;
@@ -155,6 +173,7 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
       lexicon: lexicon(tokenized),
       nicknames: nicknames(tokenized),
       checkIns: prompts.filter((p) => CHECK_IN.test(p.text)).length,
+      crashouts: crashouts(prompts),
     },
     loyalty: {
       claudeShare: share(agents.claude.prompts, prompts.length),
@@ -163,7 +182,7 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
       bothAgentDays: bothAgentDays(prompts),
     },
     chapters: chapters(prompts, tokenized, words),
-    work: work(h),
+    work: work(h, days.at(-1) ?? null),
   };
 }
 
@@ -223,13 +242,37 @@ function chapters(prompts: Prompt[], tokenized: string[][], words: Words): Wrapp
     .filter((c) => c.words.length >= 3);
 }
 
+// Mostly capitals, with a few whole words in them: shouting, not an acronym.
+function shouting(text: string): boolean {
+  const letters = text.replace(/[^A-Za-z]/g, "");
+  const upper = letters.replace(/[^A-Z]/g, "").length;
+  return letters.length >= 12 && (text.match(/\b[A-Z]{3,}\b/g) ?? []).length >= 3 && upper / letters.length >= 0.7;
+}
+
+function crashouts(prompts: Prompt[]): Crashouts {
+  const perDay = new Map<string, number>();
+  const swears = new Map<string, number>();
+  let count = 0;
+  for (const p of prompts) {
+    const sworn = SWEARS.filter(([, re]) => re.test(p.text)).map(([word]) => word);
+    if (!sworn.length && !TEMPER.test(p.text) && !shouting(p.text)) continue;
+    count++;
+    const day = localDay(p.at);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+    for (const word of sworn) swears.set(word, (swears.get(word) ?? 0) + 1);
+  }
+  const top = <T,>(m: Map<T, number>) => [...m].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])))[0];
+  const worst = top(perDay);
+  return { count, worstDay: worst ? { day: worst[0], count: worst[1] } : null, word: top(swears)?.[0] ?? null };
+}
+
 function nicknames(tokenized: string[][]): { word: string; count: number }[] {
   const counts = new Map(NICKNAMES.map((w) => [w, 0]));
   for (const toks of tokenized) for (const w of toks) if (counts.has(w)) counts.set(w, counts.get(w)! + 1);
   return [...counts].filter(([, n]) => n > 0).map(([word, count]) => ({ word, count })).sort((a, b) => b.count - a.count);
 }
 
-function work(h: Harvest): Wrapped["work"] {
+function work(h: Harvest, lastDay: string | null): Wrapped["work"] {
   const count = (kind: string) => h.actions.filter((a) => a.kind === kind).length;
   const byLanguage = new Map<string, number>();
   for (const a of h.actions) {
@@ -248,11 +291,12 @@ function work(h: Harvest): Wrapped["work"] {
     pushes: count("push"),
     prs: count("pr"),
     deploys: count("deploy"),
-    biggestWeek: biggestWeek(h.actions.filter((a) => a.kind === "commit").map((a) => a.at)),
+    biggestWeek: biggestWeek(h.actions.filter((a) => a.kind === "commit").map((a) => a.at), lastDay),
   };
 }
 
-function biggestWeek(commits: Date[]): Wrapped["work"]["biggestWeek"] {
+// A week still going ends on the last day in the logs, never in the future.
+function biggestWeek(commits: Date[], lastDay: string | null): Wrapped["work"]["biggestWeek"] {
   const weeks = new Map<string, number>();
   for (const at of commits) {
     const monday = new Date(at.getFullYear(), at.getMonth(), at.getDate() - ((at.getDay() + 6) % 7), 12);
@@ -263,7 +307,8 @@ function biggestWeek(commits: Date[]): Wrapped["work"]["biggestWeek"] {
   if (!from || !n) return null;
   const sunday = new Date(`${from}T12:00:00`);
   sunday.setDate(sunday.getDate() + 6);
-  return { from, to: localDay(sunday), commits: n };
+  const to = localDay(sunday);
+  return { from, to: lastDay && lastDay < to && lastDay >= from ? lastDay : to, commits: n };
 }
 
 function agentStats(agent: Agent, h: Harvest): AgentStats {

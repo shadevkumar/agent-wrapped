@@ -68,6 +68,30 @@ test("one command can ship in several ways, and the biggest week runs Monday to 
   assert.deepEqual(story(0)?.biggestWeek, { from: "2026-06-01", to: "2026-06-07", commits: 6 });
 });
 
+test("a week still going ends on the last day in the logs", () => {
+  const h = emptyHarvest();
+  const at = (day: number) => new Date(2026, 5, day, 12);
+  // Monday Jun 8 to Wednesday Jun 10, and the last prompt is on the Wednesday.
+  for (const day of [8, 9, 10, 10, 10]) h.actions.push({ agent: "codex", at: at(day), kind: "commit" });
+  h.prompts.push({ agent: "codex", text: "ship it", at: at(10), session: "s" });
+  assert.deepEqual(computeWrapped(h, new Words([], new Set())).work.biggestWeek, { from: "2026-06-08", to: "2026-06-10", commits: 5 });
+});
+
+test("crashouts count swearing, shouting and \"still not working\", not acronyms or quick typing", () => {
+  const story = (prompts: string[]) => {
+    const w = wrappedWith(prompts);
+    return storyData(w, pickPersonality(w), { text: "", by: "template" }).crashouts;
+  };
+  const calm = ["fix the API URL in the JSON config", "wth the new file", "why is it slow", "ok next"];
+  const temper = ["dude wtf did you do", "WHY IS THIS BROKEN AGAIN", "still not working", "where did it go???"];
+  // Four is not enough for a card; five is. The word is starred out.
+  assert.equal(story([...calm, ...temper]), null);
+  const shown = story([...calm, ...temper, "bro wtff why"]);
+  assert.equal(shown?.count, 5);
+  assert.equal(shown?.word, "w*f");
+  assert.equal(shown?.worstDay?.count, 1);
+});
+
 test("the catchphrase skips phrases everyone types", () => {
   const picked = pickCatchphrase([
     { text: "let me know", sessions: 100 },

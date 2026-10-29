@@ -31,11 +31,11 @@ window.va("beforeSend", (event) => {
 </script>
 <script defer src="/_vercel/insights/script.js"></script>`;
 
-// On the public page with no story in its link, the home page shows as soon
-// as its title's font is in, without waiting for the page's script to run,
-// and never shows its boxes before its words.
+// On the public page with no story in its link (no #code, not /s/<name>),
+// the home page shows as soon as its title's font is in, without waiting for
+// the page's script to run, and never shows its boxes before its words.
 const HOME_FIRST = `<script>
-if (!location.hash) {
+if (!location.hash && !location.pathname.startsWith("/s/")) {
   document.documentElement.classList.add("home");
   document.fonts.load("480 1em Geist").finally(() => document.documentElement.classList.add("fonts-in"));
 }

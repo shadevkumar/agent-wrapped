@@ -34,6 +34,8 @@ export interface StoryData {
   personality: Personality;
   letter: Letter;
   period: Span | null; // "month" when made with --last-month; older stories and links have none
+  // The swear word is starred out here, so the link never carries it whole.
+  crashouts: { count: number; worstDay: { day: string; count: number } | null; word: string | null } | null;
 }
 
 // Phrases everyone types; a catchphrase should sound like this person.
@@ -46,6 +48,12 @@ export function pickCatchphrase(list: Wrapped["voice"]["catchphrases"]) {
 const SPELLINGS_SHOWN = 16;
 // Pushes, pull requests and deploys together, before they make a card.
 const SHIPPED = 5;
+
+// Crashouts before they make a card.
+const CRASHOUTS = 5;
+
+// "wtf" -> "w*f", "fuck" -> "f**k".
+export const starred = (word: string) => word[0] + "*".repeat(word.length - 2) + word.at(-1);
 
 // A count this small isn't a habit yet.
 const HABIT = 20;
@@ -105,5 +113,9 @@ export function storyData(
     personality,
     letter,
     period: span,
+    crashouts:
+      w.voice.crashouts.count >= CRASHOUTS
+        ? { ...w.voice.crashouts, word: w.voice.crashouts.word && starred(w.voice.crashouts.word) }
+        : null,
   };
 }

@@ -28,6 +28,7 @@ const FIELDS = [
   ["letter", ["text"]],
   "period",
   ["shipped", ["since", "pushes", "prs", "deploys", ["biggestWeek", ["from", "to", "commits"]]]],
+  ["crashouts", ["count", ["worstDay", ["day", "count"]], "word"]],
 ];
 
 export function toLink(data, fields = FIELDS) {

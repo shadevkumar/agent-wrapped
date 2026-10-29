@@ -22,12 +22,15 @@ Write a short letter from their agents to them. Rules:
 - Never invent numbers, names, projects or events that are not in the facts.
 - End with a short sign-off line from "your agents".`;
 
+// "02:34" -> "2:34 AM". Late-night times run from midnight to 5 AM.
+export const clock = (hhmm: string) => `${Number(hhmm.slice(0, 2)) % 12 || 12}:${hhmm.slice(3)} AM`;
+
 export function factsFor(w: Wrapped, p: Personality, span: Span = "year"): string {
   const facts = [
     span === "month" ? "This story covers only their last 30 days." : "This story covers their year so far.",
     `Their personality: ${p.name}. ${p.line}`,
     `${w.totals.prompts} prompts over ${w.totals.activeDays} days; their agents worked ${Math.round(w.totals.agentHours)} hours.`,
-    w.rhythm.lateNight.latest ? `Latest prompt after midnight: ${w.rhythm.lateNight.latest}.` : "",
+    w.rhythm.lateNight.latest ? `Latest they were still prompting, after midnight: ${clock(w.rhythm.lateNight.latest)}.` : "",
     w.rhythm.longestStreak ? `Longest streak: ${w.rhythm.longestStreak.days} days in a row.` : "",
     ...w.voice.topPrompts.slice(0, 3).map((t) => `They typed "${t.text}" ${t.count} times.`),
     ...w.voice.catchphrases.slice(0, 2).map((c) => `Catchphrase "${c.text}" in ${c.sessions} sessions.`),
@@ -63,7 +66,7 @@ export function templateLetter(w: Wrapped, p: Personality): string {
     `${w.totals.prompts.toLocaleString("en-US")} prompts. We read every one.`,
     top ? `Some of them just said “${top.text}”. We got it every time.` : "",
     typo ? `We also know what “${typo.spellings[0]?.spelling}” means now. It means ${typo.word}.` : "",
-    w.rhythm.lateNight.latest ? `See you at ${w.rhythm.lateNight.latest} again soon.` : "See you tomorrow.",
+    w.rhythm.lateNight.latest ? `See you at ${clock(w.rhythm.lateNight.latest)} again soon.` : "See you tomorrow.",
     "",
     `Yours, from the other side of the prompt, your agents`,
   ];

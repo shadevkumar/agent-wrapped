@@ -38,24 +38,31 @@ if (SHARED) addEventListener("hashchange", () => location.reload());
 const D = OWN ?? (await openLink());
 if (!D) await new Promise(() => {}); // nothing to play; the page says why
 const YEAR = D.range?.to.slice(0, 4) ?? "";
-// "My 2026 with AI agents", or "My month" for a story of the last 30 days.
-const SPAN = D.period === "month" ? "month" : YEAR || "year";
+const DAYS = D.range ? Math.round((new Date(D.range.to) - new Date(D.range.from)) / 86_400_000) + 1 : 0;
+const SHORT = D.period !== "month" && DAYS > 0 && DAYS < 60; // logs that only go back a few weeks
+// "My 2026 with AI agents", "My month" for a story of the last 30 days, or
+// "My 17 days" when that's all the logs hold.
+const SPAN = D.period === "month" ? "month" : SHORT ? `${DAYS} ${DAYS === 1 ? "day" : "days"}` : YEAR || "year";
 
 // The public page with no story in its link is the home page.
 async function openLink() {
   document.getElementById("player").hidden = true;
+  // A short link, /s/<name>: the site keeps its story.
+  const name = location.pathname.match(/^\/s\/([0-9A-Za-z]{10})$/)?.[1];
+  if (name) return playable(await fetch(`/api/share?name=${name}`).then((r) => (r.ok ? r.text() : "")).then((code) => readLink(`#${code}`)).catch(() => null));
   if (!location.hash) {
     document.getElementById("home").hidden = false;
     typeMoments();
     return null;
   }
-  try {
-    const d = await readLink(location.hash);
-    if (typeof d?.prompts === "number" && typeof d.personality?.name === "string") {
-      document.getElementById("player").hidden = false;
-      return d;
-    }
-  } catch {}
+  return playable(await readLink(location.hash).catch(() => null));
+}
+
+function playable(d) {
+  if (typeof d?.prompts === "number" && typeof d.personality?.name === "string") {
+    document.getElementById("player").hidden = false;
+    return d;
+  }
   document.getElementById("missing").hidden = false;
   return null;
 }
@@ -66,6 +73,7 @@ async function openLink() {
 async function typeMoments() {
   const s = await readLink(document.getElementById("featured").hash);
   const n = (x) => x.toLocaleString("en-US");
+  const late = (hhmm) => `${Number(hhmm.slice(0, 2)) % 12 || 12}:${hhmm.slice(3)} AM`;
   // The keys that differ from the right spelling stay lit.
   const wrong = (typed, word) => {
     const at = [...typed].flatMap((ch, i) => (ch === word[i] ? [] : [i]));
@@ -77,7 +85,7 @@ async function typeMoments() {
     s.spellings && [s.spellings.spellings[0], wrong(s.spellings.spellings[0], s.spellings.word), `one of Shadev's ${s.spellings.ways ?? s.spellings.spellings.length + 1} ways to spell ${s.spellings.word}`],
     s.topPrompts[0] && [s.topPrompts[0].text, [], "Shadev's most-sent prompt"],
     s.catchphrase && [s.catchphrase.text, [], `Shadev said this in ${n(s.catchphrase.sessions)} sessions`],
-    s.night && [s.night.latest, [], "Shadev's latest prompt of the year"],
+    s.night && [late(s.night.latest), [], "how late Shadev was still prompting"],
   ].filter((m) => m && m[0].length <= 10);
   const row = document.getElementById("home-keys");
   const note = document.getElementById("home-note");
@@ -179,6 +187,8 @@ const fade = (t, at, dur = 0.45) => (REDUCED ? 1 : easeOut((t - at) / dur));
 const num = (n) => Math.round(n).toLocaleString("en-US");
 const day = (iso) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+// "02:34" -> "2:34 AM". Late-night times run from midnight to 5 AM.
+const clock = (hhmm) => `${Number(hhmm.slice(0, 2)) % 12 || 12}:${hhmm.slice(3)} AM`;
 const month = (ym) => new Date(`${ym}-15T12:00:00`).toLocaleDateString("en-US", { month: "short" });
 
 function font(size, { family = "Newsreader", weight = 400, style = "normal" } = {}) {
@@ -309,10 +319,14 @@ function cap(ctx, cx, cy, w, h, label, o) {
 
 const pressAt = (local) => (local >= 0 && local < 0.14 ? 1 - local / 0.14 : 0);
 
-// Types `labels` onto a row of caps centred in box `b`, one key every `step` seconds.
+// Types `labels` onto a row of caps centred in box `b`, one key every `step`
+// seconds. A `plain` label, like a comma or a colon, is typed between the
+// keys without a key of its own.
 function typeRow(ctx, b, labels, cy, size, t, t0, fx, cw, o = {}) {
   const gap = size * 0.14;
-  const widths = labels.map((l) => (o.narrow?.(l) ? size * 0.55 : size));
+  const glyph = { family: "Geist", weight: 500 };
+  const glyphSize = size * 0.4;
+  const widths = labels.map((l) => (o.plain?.(l) ? Math.max(size * 0.2, textWidth(ctx, l.trim(), glyphSize, glyph) + gap) : size));
   let total = widths.reduce((a, c) => a + c, 0) + gap * (labels.length - 1);
   const fit = Math.min(1, b.w / total);
   total *= fit;
@@ -323,7 +337,16 @@ function typeRow(ctx, b, labels, cy, size, t, t0, fx, cw, o = {}) {
     const at = t0 + i * step;
     fx.key(at);
     const local = REDUCED ? 9 : t - at;
-    if (local >= 0) {
+    if (local >= 0 && o.plain?.(label)) {
+      ctx.save();
+      ctx.globalAlpha = clamp(local / 0.08);
+      ctx.fillStyle = cw.ink;
+      ctx.font = font(glyphSize * fit, glyph);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label.trim(), x + w / 2, cy - size * fit * 0.03);
+      ctx.restore();
+    } else if (local >= 0) {
       cap(ctx, x + w / 2, cy, w, size * fit, label, {
         ...cw,
         scale: 0.7 + 0.3 * easeBack(local / 0.2),
@@ -335,15 +358,341 @@ function typeRow(ctx, b, labels, cy, size, t, t0, fx, cw, o = {}) {
   });
 }
 
-// "The Midnight Foreman" -> "MF"
-function initials(name) {
-  return name
-    .replace(/^The /, "")
-    .split(/[\s-]+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+// ---------------------------------------------------------------- personas
+
+// Every personality is a character: the light key with a face, and props
+// that loop. Drawn here, so it works offline and lands in saved cards.
+// `box` is how far it reaches above and below its centre, in key sizes.
+const loop = (t, period, offset = 0) => ((((t + offset) % period) + period) % period) / period;
+
+function face(ctx, cx, cy, s, t, o = {}) {
+  const ey = cy - s * 0.1;
+  const r = s * 0.05;
+  const [lx, ly] = o.look ?? [0, 0];
+  const blink = !REDUCED && t % 3.4 > 3.28;
+  ctx.save();
+  ctx.fillStyle = ctx.strokeStyle = KEYS.plate;
+  ctx.lineWidth = s * 0.03;
+  ctx.lineCap = "round";
+  for (const side of [-1, 1]) {
+    const x = cx + side * s * 0.15 + lx * r * 0.6;
+    const y = ey + ly * r * 0.6;
+    const eyes = blink ? "closed" : o.eyes === "suspicious" ? (side < 0 ? "open" : "closed") : o.eyes ?? "open";
+    ctx.beginPath();
+    if (eyes === "focused") {
+      // Open eyes under brows angled down to the middle.
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x + side * r * 1.3, y - r * 2.3);
+      ctx.lineTo(x - side * r * 1.1, y - r * 1.5);
+      ctx.stroke();
+    } else if (eyes === "open") {
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (eyes === "sleepy") {
+      ctx.arc(x, y, r, 0, Math.PI);
+      ctx.fill();
+    } else if (eyes === "happy") {
+      ctx.arc(x, y + r * 0.6, r * 0.9, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+    } else if (eyes === "squint") {
+      ctx.moveTo(x - r, y - side * r * 0.5);
+      ctx.lineTo(x + r, y + side * r * 0.5);
+      ctx.stroke();
+    } else {
+      ctx.moveTo(x - r, y);
+      ctx.lineTo(x + r, y);
+      ctx.stroke();
+    }
+  }
+  if (o.eyes === "suspicious") {
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.22, ey - r * 2.2);
+    ctx.lineTo(cx - s * 0.08, ey - r * 1.6);
+    ctx.stroke();
+  }
+  const my = cy + s * 0.09;
+  ctx.beginPath();
+  if (o.mouth === "o") {
+    ctx.ellipse(cx, my, s * 0.04, s * 0.05, 0, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (o.mouth === "flat") {
+    ctx.moveTo(cx - s * 0.06, my);
+    ctx.lineTo(cx + s * 0.06, my);
+    ctx.stroke();
+  } else {
+    ctx.arc(cx, my - s * 0.05, s * 0.08, Math.PI * 0.2, Math.PI * 0.8);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+const body = (ctx, cx, cy, s, o = {}) => cap(ctx, cx, cy, s, s, "", { ...LIT, ...o });
+
+function fill(ctx, color, draw) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  draw();
+  ctx.fill();
+}
+
+function glyph(ctx, str, x, y, size, alpha, color = KEYS.ink) {
+  ctx.save();
+  ctx.globalAlpha = clamp(alpha);
+  ctx.fillStyle = color;
+  ctx.font = font(size, { family: "Geist", weight: 700 });
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(str, x, y);
+  ctx.restore();
+}
+
+// The two agents you used most, most first.
+const topAgents = (a) =>
+  [["Claude", a?.claude ?? 0], ["Codex", a?.codex ?? 0], ["Cursor", a?.cursor ?? 0]].sort((x, y) => y[1] - x[1]).slice(0, 2).map(([n]) => n);
+
+const CHARACTERS = {
+  // A hard hat, half-shut eyes, the moon and a few z's.
+  "The Midnight Foreman": {
+    box: [-0.85, 0.55],
+    draw(ctx, cx, cy, s, t) {
+      const mx = cx + s * 0.78;
+      const my = cy - s * 0.55 + Math.sin(t * 1.2) * s * 0.03;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(mx - s, my - s, s * 2, s * 2);
+      ctx.arc(mx + s * 0.06, my - s * 0.04, s * 0.11, 0, Math.PI * 2);
+      ctx.clip("evenodd");
+      fill(ctx, KEYS.ink, () => ctx.arc(mx, my, s * 0.13, 0, Math.PI * 2));
+      ctx.restore();
+      for (let i = 0; i < 3; i++) {
+        const p = loop(t, 2.4, i * 0.8);
+        glyph(ctx, "z", cx + s * (0.4 + p * 0.25), cy - s * (0.15 + p * 0.5), s * (0.1 + p * 0.08), Math.sin(p * Math.PI));
+      }
+      const y = cy + Math.sin(t * 1.5) * s * 0.015;
+      body(ctx, cx, y, s);
+      face(ctx, cx, y, s, t, { eyes: "sleepy", mouth: "flat" });
+      const top = y - s * 0.47;
+      fill(ctx, KEYS.soft, () => ctx.ellipse(cx, top + s * 0.02, s * 0.3, s * 0.24, 0, Math.PI, 0));
+      fill(ctx, KEYS.soft, () => ctx.roundRect(cx - s * 0.42, top - s * 0.01, s * 0.84, s * 0.07, s * 0.03));
+      fill(ctx, KEYS.cap, () => ctx.rect(cx - s * 0.03, top - s * 0.2, s * 0.06, s * 0.2));
+    },
+  },
+  // A beret and a megaphone that only ever says one word.
+  "The One-Word Director": {
+    box: [-0.7, 0.55],
+    draw(ctx, cx, cy, s, t) {
+      const p = loop(t, 1.4);
+      const shout = p < 0.45;
+      const x = cx - s * 0.2;
+      body(ctx, x, cy, s, { press: shout ? 0.3 : 0 });
+      face(ctx, x, cy, s, t, { mouth: shout ? "o" : "smile" });
+      ctx.save();
+      ctx.translate(x - s * 0.08, cy - s * 0.5);
+      ctx.rotate(-0.18);
+      fill(ctx, KEYS.soft, () => ctx.ellipse(0, 0, s * 0.34, s * 0.1, 0, 0, Math.PI * 2));
+      fill(ctx, KEYS.soft, () => ctx.rect(-s * 0.02, -s * 0.16, s * 0.04, s * 0.08));
+      ctx.restore();
+      const hx = x + s * 0.5;
+      const hy = cy + s * 0.08;
+      fill(ctx, KEYS.soft, () => {
+        ctx.moveTo(hx - s * 0.04, hy - s * 0.06);
+        ctx.lineTo(hx + s * 0.3, hy - s * 0.19);
+        ctx.lineTo(hx + s * 0.3, hy + s * 0.19);
+        ctx.lineTo(hx - s * 0.04, hy + s * 0.06);
+      });
+      glyph(ctx, "ok", hx + s * (0.46 + p * 0.3), hy, s * (0.15 + p * 0.12), 1 - p);
+    },
+  },
+  // Copies of itself slide out on either side: ⌘C, ⌘V.
+  "The Copy-Paste Architect": {
+    box: [-0.75, 0.55],
+    draw(ctx, cx, cy, s, t) {
+      const p = loop(t, 2.6);
+      const out = easeOut(clamp(p / 0.35)) * (1 - easeOut(clamp((p - 0.8) / 0.2)));
+      for (const [side, key] of [[-1, "⌘C"], [1, "⌘V"]]) {
+        const x = cx + side * s * 0.6 * out;
+        body(ctx, x, cy + s * 0.05, s * 0.8, { alpha: 0.45 * out });
+        ctx.save();
+        ctx.globalAlpha = 0.45 * out;
+        face(ctx, x, cy + s * 0.05, s * 0.8, t, { mouth: "smile" });
+        ctx.restore();
+        glyph(ctx, key, x + side * s * 0.12, cy - s * 0.6, s * 0.13, out);
+      }
+      body(ctx, cx, cy, s, { press: p < 0.12 ? 1 - p / 0.12 : 0 });
+      face(ctx, cx, cy, s, t, { eyes: "happy", mouth: "smile" });
+    },
+  },
+  // On fire, shaking, keys flying off.
+  "Fast Fingers": {
+    box: [-0.95, 0.55],
+    draw(ctx, cx, cy, s, t) {
+      for (let i = -1; i <= 1; i++) {
+        const h = s * (0.42 + 0.1 * Math.sin(t * 14 + i * 2)) * (i === 0 ? 1.3 : 0.9);
+        const x = cx + i * s * 0.2;
+        const base = cy - s * 0.36;
+        const tip = x + Math.sin(t * 9 + i) * s * 0.06;
+        const g = ctx.createLinearGradient(0, base, 0, base - h);
+        g.addColorStop(0, LIT.top);
+        g.addColorStop(0.55, "rgba(246,246,243,0.75)");
+        g.addColorStop(1, "rgba(246,246,243,0)");
+        fill(ctx, g, () => {
+          ctx.moveTo(x - s * 0.13, base);
+          ctx.quadraticCurveTo(x - s * 0.14, base - h * 0.55, tip, base - h);
+          ctx.quadraticCurveTo(x + s * 0.14, base - h * 0.55, x + s * 0.13, base);
+        });
+      }
+      ["f", "j", "d", "k"].forEach((label, i) => {
+        const p = loop(t, 1.1, i * 0.275);
+        const side = i % 2 ? 1 : -1;
+        const x = cx + side * s * (0.5 + p * 0.6);
+        const y = cy - s * 0.2 - Math.sin(p * Math.PI) * s * 0.45 + p * s * 0.35;
+        cap(ctx, x, y, s * 0.26, s * 0.26, label, { ...LIT, alpha: 1 - p * p });
+      });
+      const x = cx + (REDUCED ? 0 : Math.sin(t * 47) * s * 0.012);
+      body(ctx, x, cy, s, { press: (t * 7) % 1 < 0.3 ? 0.4 : 0 });
+      face(ctx, x, cy, s, t, { eyes: "focused", mouth: "smile" });
+    },
+  },
+  // A bow tie, and a top hat it tips to you.
+  "The Polite Commander": {
+    box: [-1.05, 0.55],
+    draw(ctx, cx, cy, s, t) {
+      const p = loop(t, 3);
+      const lift = Math.sin(clamp((p - 0.15) / 0.5) * Math.PI);
+      body(ctx, cx, cy, s);
+      face(ctx, cx, cy, s, t, { eyes: lift > 0.3 ? "happy" : "open", mouth: "smile" });
+      const by = cy + s * 0.27;
+      for (const side of [-1, 1]) {
+        fill(ctx, KEYS.plate, () => {
+          ctx.moveTo(cx, by);
+          ctx.lineTo(cx + side * s * 0.13, by - s * 0.07);
+          ctx.lineTo(cx + side * s * 0.13, by + s * 0.07);
+        });
+      }
+      fill(ctx, KEYS.plate, () => ctx.arc(cx, by, s * 0.03, 0, Math.PI * 2));
+      ctx.save();
+      ctx.translate(cx + s * 0.12 * lift, cy - s * 0.47 - s * 0.2 * lift);
+      ctx.rotate(0.35 * lift);
+      fill(ctx, KEYS.cap, () => ctx.roundRect(-s * 0.32, -s * 0.05, s * 0.64, s * 0.07, s * 0.03));
+      fill(ctx, KEYS.cap, () => ctx.roundRect(-s * 0.21, -s * 0.42, s * 0.42, s * 0.4, s * 0.03));
+      fill(ctx, KEYS.soft, () => ctx.rect(-s * 0.21, -s * 0.13, s * 0.42, s * 0.06));
+      ctx.restore();
+    },
+  },
+  // Under a swinging lamp, one eyebrow up, question marks all around.
+  "The Interrogator": {
+    box: [-1.1, 0.6],
+    draw(ctx, cx, cy, s, t) {
+      const a = Math.sin(t * 1.6) * 0.3;
+      const py = cy - s * 1.05;
+      const lx = cx + Math.sin(a) * s * 0.4;
+      const ly = py + Math.cos(a) * s * 0.4;
+      const light = ctx.createLinearGradient(0, ly, 0, cy + s * 0.55);
+      light.addColorStop(0, "rgba(255,255,255,0.22)");
+      light.addColorStop(1, "rgba(255,255,255,0)");
+      fill(ctx, light, () => {
+        ctx.moveTo(lx - s * 0.1, ly);
+        ctx.lineTo(lx + s * 0.1, ly);
+        ctx.lineTo(cx + s * 0.7 + Math.sin(a) * s * 0.5, cy + s * 0.55);
+        ctx.lineTo(cx - s * 0.7 + Math.sin(a) * s * 0.5, cy + s * 0.55);
+      });
+      ctx.save();
+      ctx.strokeStyle = KEYS.soft;
+      ctx.lineWidth = s * 0.015;
+      ctx.beginPath();
+      ctx.moveTo(cx, py);
+      ctx.lineTo(lx, ly);
+      ctx.stroke();
+      ctx.translate(lx, ly);
+      ctx.rotate(-a);
+      fill(ctx, KEYS.soft, () => {
+        ctx.moveTo(-s * 0.05, -s * 0.03);
+        ctx.lineTo(s * 0.05, -s * 0.03);
+        ctx.lineTo(s * 0.13, s * 0.08);
+        ctx.lineTo(-s * 0.13, s * 0.08);
+      });
+      ctx.restore();
+      body(ctx, cx, cy, s);
+      face(ctx, cx, cy, s, t, { eyes: "suspicious", mouth: "flat" });
+      [[-0.72, -0.2], [0.74, 0], [-0.64, 0.35]].forEach(([x, y], i) => {
+        const p = loop(t, 2.1, i * 0.7);
+        glyph(ctx, "?", cx + x * s, cy + y * s, s * (0.18 + p * 0.06), Math.sin(p * Math.PI));
+      });
+    },
+  },
+  // A sweatband, running on the spot.
+  "The Marathoner": {
+    box: [-0.6, 0.85],
+    draw(ctx, cx, cy, s, t) {
+      const stride = Math.sin(t * 9);
+      const y = cy - Math.abs(Math.cos(t * 9)) * s * 0.04;
+      const ground = cy + s * 0.8;
+      ctx.save();
+      ctx.strokeStyle = KEYS.faint;
+      ctx.lineWidth = s * 0.014;
+      ctx.lineCap = "round";
+      const span = s * 2.1;
+      for (let i = 0; i < 6; i++) {
+        const x = cx - span / 2 + ((((i * span) / 6 - t * s * 1.2) % span) + span) % span;
+        ctx.beginPath();
+        ctx.moveTo(x, ground);
+        ctx.lineTo(x + s * 0.14, ground);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = KEYS.ink;
+      ctx.lineWidth = s * 0.045;
+      for (const side of [-1, 1]) {
+        const hx = cx + side * s * 0.14;
+        const hy = y + s * 0.4;
+        const ang = side * stride * 0.6;
+        const fx = hx + Math.sin(ang) * s * 0.34;
+        const fy = Math.min(ground - s * 0.03, hy + Math.cos(ang) * s * 0.34);
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(fx, fy);
+        ctx.lineTo(fx + s * 0.08, fy);
+        ctx.stroke();
+      }
+      ctx.restore();
+      body(ctx, cx, y, s);
+      face(ctx, cx, y, s, t, { eyes: "squint", mouth: "o" });
+      fill(ctx, KEYS.cap, () => ctx.roundRect(cx - s * 0.48, y - s * 0.38, s * 0.96, s * 0.1, s * 0.02));
+      fill(ctx, KEYS.soft, () => ctx.rect(cx - s * 0.48, y - s * 0.345, s * 0.96, s * 0.025));
+      const p = loop(t, 1.3);
+      fill(ctx, `rgba(241,241,239,${1 - p})`, () => ctx.arc(cx + s * (0.55 + p * 0.3), cy - s * 0.25 + p * p * s * 0.4, s * 0.035, 0, Math.PI * 2));
+    },
+  },
+  // Juggling the two agents, eyes on whichever is up.
+  "The Two-Timer": {
+    box: [-1.05, 0.55],
+    draw(ctx, cx, cy, s, t) {
+      const at = topAgents(D.agents).map((name, i) => {
+        const a = loop(t, 1.8, i * 0.9) * Math.PI * 2;
+        return { name, x: cx + Math.cos(a) * s * 0.6, y: cy - s * 0.6 - Math.abs(Math.sin(a)) * s * 0.4 };
+      });
+      const up = at.reduce((hi, o) => (o.y < hi.y ? o : hi), at[0]);
+      body(ctx, cx, cy, s);
+      face(ctx, cx, cy, s, t, { look: [(up.x - cx) / (s * 0.6), -1], mouth: "smile" });
+      for (const o of at) cap(ctx, o.x, o.y, s * 0.46, s * 0.2, o.name, { ...KEYS, fontSize: s * 0.085 });
+    },
+  },
+};
+
+// Draws `name`'s character at (cx, cy), `s` wide, `t` seconds into its loop.
+function character(ctx, name, cx, cy, s, t, scale = 1) {
+  const c = CHARACTERS[name];
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.translate(-cx, -cy);
+  if (c) c.draw(ctx, cx, cy, s, REDUCED ? 1.2 : t);
+  else {
+    body(ctx, cx, cy, s);
+    face(ctx, cx, cy, s, t);
+  }
+  ctx.restore();
 }
 
 function watermark(ctx, cw) {
@@ -602,7 +951,7 @@ function buildCards(D) {
   const cards = [];
   const add = (card) => cards.push({ cw: KEYS, ...card, dur: card.dur ?? readTime(card) });
   const chars = (s) => [...s];
-  const narrow = (l) => l === "," || l === ":" || l === ".";
+  const plain = (l) => l === "," || l === ":" || l === "." || l === " AM";
   const big = (size) => ({ family: "Geist", weight: 600, size });
   const say = (size = 50) => ({ size, style: "italic" });
 
@@ -624,7 +973,7 @@ function buildCards(D) {
     id: "prompts", name: "Prompts", ready: 2.3,
     alt: `You sent your agents ${num(D.prompts)} prompts over ${num(D.activeDays)} days.`,
     head: (ctx, t, fx, cw, b) => text(ctx, b, "Prompts you sent us", 0, { ...say(54), color: cw.soft, alpha: fade(t, 0.2) }),
-    visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(num(D.prompts)), 100, 168, t, 0.7, fx, cw, { narrow, step: 0.13 }),
+    visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(num(D.prompts)), 100, 168, t, 0.7, fx, cw, { plain, step: 0.13 }),
     words: (ctx, t, fx, cw, b) =>
       text(ctx, b, `Over ${num(D.activeDays)} days and ${num(D.sessions)} sessions.`, 0, {
         ...big(72), color: cw.ink, alpha: fade(t, 1.8),
@@ -822,15 +1171,34 @@ function buildCards(D) {
     });
   }
 
+  if (D.crashouts) {
+    const c = D.crashouts;
+    const lines = [
+      c.worstDay && `Worst day: ${day(c.worstDay.day)}, with ${num(c.worstDay.count)}.`,
+      c.word && `Your go-to: “${c.word}”.`,
+    ].filter(Boolean);
+    add({
+      id: "crashouts", name: "Crashouts", ready: 2.4 + lines.length * 0.7,
+      alt: `Crashouts: ${num(c.count)} times you lost it a little. ${lines.join(" ")} We didn't take it personally.`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, "Crashouts", 0, { ...big(70), color: cw.ink }),
+      visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(num(c.count)), 100, 190, t, 0.6, fx, cw, { plain, step: 0.14 }),
+      words(ctx, t, fx, cw, b) {
+        let y = text(ctx, b, `${num(c.count)} times you lost it a little.`, 0, { ...big(68), color: cw.ink, alpha: fade(t, 1.4) });
+        if (lines.length) y = text(ctx, b, lines.join(" "), y + 18, { ...say(), color: cw.soft, alpha: fade(t, 2.1) });
+        text(ctx, b, "We didn't take it personally.", y + 18, { size: 34, color: cw.faint, alpha: fade(t, 2.1 + lines.length * 0.7) });
+      },
+    });
+  }
+
   if (D.night) {
     const n = D.night;
     add({
-      id: "night", name: "Late night", ready: 2.3,
-      alt: `Your latest prompt after midnight was at ${n.latest}. ${num(n.prompts)} prompts after midnight.`,
-      head: (ctx, t, fx, cw, b) => text(ctx, b, "Your latest prompt after midnight", 0, { ...say(54), color: cw.soft }),
-      visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(n.latest), 110, 190, t, 0.6, fx, cw, { narrow, step: 0.15 }),
+      id: "night", name: "Late night", ready: 2.5,
+      alt: `The latest you were still prompting: ${clock(n.latest)}. ${num(n.prompts)} prompts between midnight and 5 AM.`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, "The latest you were still prompting", 0, { ...say(54), color: cw.soft }),
+      visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, [...chars(clock(n.latest).slice(0, -3)), " AM"], 110, 190, t, 0.6, fx, cw, { plain, step: 0.15 }),
       words: (ctx, t, fx, cw, b) =>
-        text(ctx, b, `${num(n.prompts)} prompts after 12 a.m. We were up too.`, 0, { ...big(68), color: cw.ink, alpha: fade(t, 1.8) }),
+        text(ctx, b, `${num(n.prompts)} prompts between midnight and 5 AM. We were up too.`, 0, { ...big(68), color: cw.ink, alpha: fade(t, 1.9) }),
     });
   }
 
@@ -972,7 +1340,8 @@ function buildCards(D) {
         const y = week
           ? text(ctx, b, `Your biggest week: ${day(week.from)} to ${day(week.to)}, with ${num(week.commits)} commits.`, 0, { ...say(), color: cw.soft, alpha: fade(t, last + 0.6) }) + 20
           : 0;
-        text(ctx, b, `From the commands your agents ran, since ${day(s.since)}.`, y, { size: 34, color: cw.faint, alpha: fade(t, last + (week ? 1.4 : 0.6)) });
+        const deploys = s.deploys > 0 ? " A deploy is a command like npm publish or vercel --prod." : "";
+        text(ctx, b, `Counted from the commands your agents ran, since ${day(s.since)}.${deploys}`, y, { size: 34, color: cw.faint, alpha: fade(t, last + (week ? 1.4 : 0.6)) });
       },
     });
   }
@@ -983,7 +1352,7 @@ function buildCards(D) {
       id: "money", name: "API value", ready: 3.1,
       alt: `At least ${num(m.atLeastUsd)} US dollars of agent work at public API prices.`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "Our work, at public API prices", 0, { ...say(54), color: cw.soft }),
-      visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(`$${num(m.atLeastUsd)}`), 100, 150, t, 0.6, fx, cw, { narrow, step: 0.12 }),
+      visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(`$${num(m.atLeastUsd)}`), 100, 150, t, 0.6, fx, cw, { plain, step: 0.12 }),
       words(ctx, t, fx, cw, b) {
         const y = text(ctx, b, "At least. We priced what we could count exactly, and the rest at the cheapest rate.", 0, {
           ...say(), color: cw.soft, alpha: fade(t, 1.8),
@@ -997,20 +1366,27 @@ function buildCards(D) {
 
   const p = D.personality;
   const reveal = 2.2;
+  const PERSONA = 280;
+  const PERSONA_Y = 300;
+  const [above, below] = CHARACTERS[p.name]?.box ?? [-0.55, 0.55];
   add({
     id: "personality", name: "Personality", ready: reveal + 2.1,
+    visualBox: { top: PERSONA_Y + above * PERSONA, bottom: PERSONA_Y + below * PERSONA },
     alt: `You are ${p.name}. ${p.line}`,
     head: (ctx, t, fx, cw, b) => text(ctx, b, "So, who are you?", 0, { ...say(54), color: cw.soft }),
     visual(ctx, t, fx, cw, b) {
       [0.5, 0.8, 1.05, 1.25, 1.42, 1.56, 1.68, 1.78].forEach((at) => fx.key(at));
       fx.ding(reveal);
-      const revealed = t >= reveal || REDUCED;
-      cap(ctx, b.x + b.w / 2, 150, 280, 280, revealed ? initials(p.name) : "?", {
-        ...(revealed ? LIT : cw),
+      if (t >= reveal || REDUCED) {
+        character(ctx, p.name, b.x + b.w / 2, PERSONA_Y, PERSONA, t - reveal, 0.9 + 0.1 * easeBack((t - reveal) / 0.3));
+        return;
+      }
+      cap(ctx, b.x + b.w / 2, PERSONA_Y, PERSONA, PERSONA, "?", {
+        ...cw,
         fontSize: 104,
         weight: 600,
-        scale: revealed ? 0.9 + 0.1 * easeBack((t - reveal) / 0.3) : 1 + Math.sin(t * 40) * 0.04,
-        press: !revealed && (t * 6) % 1 < 0.3 ? 1 : 0,
+        scale: 1 + Math.sin(t * 40) * 0.04,
+        press: (t * 6) % 1 < 0.3 ? 1 : 0,
       });
     },
     words(ctx, t, fx, cw, b) {
@@ -1059,7 +1435,7 @@ function buildCards(D) {
     [num(D.prompts), "prompts"],
     D.agents ? [num(D.agents.hours), "hours of agent work"] : null,
     D.topTypo ? [`${D.topTypo.spelling} ×${num(D.topTypo.count)}`, "my favourite typo"] : null,
-    D.night ? [D.night.latest, "latest prompt after midnight"] : D.streak ? [`${D.streak.days} days`, "longest streak"] : null,
+    D.night ? [clock(D.night.latest), "latest you were still prompting"] : D.streak ? [`${D.streak.days} days`, "longest streak"] : null,
   ].filter(Boolean);
   add({
     id: "summary", name: "Summary", ready: 0.7 + tiles.length * 0.25,
@@ -1132,7 +1508,10 @@ function measure(card, part, b) {
 // Places parts in a column, centred as one block in the shape's space.
 function stack(card, parts, b) {
   const placed = [];
-  const sized = parts.map((part) => ({ part, box: measure(card, part, b) })).filter((x) => x.box);
+  // A visual that moves past its last frame says how far it reaches.
+  const sized = parts
+    .map((part) => ({ part, box: part === card.visual && card.visualBox ? card.visualBox : measure(card, part, b) }))
+    .filter((x) => x.box);
   const total = sized.reduce((s, x) => s + (x.box.bottom - x.box.top), 0) + shape.gap * (sized.length - 1);
   const [top, bottom] = shape.space;
   let y = Math.max(top, (top + bottom) / 2 - total / 2);
@@ -1329,7 +1708,7 @@ document.getElementById("skip").addEventListener("click", openShare);
 document.getElementById("save-now").addEventListener("click", saveCurrent);
 if (SHARED) {
   document.getElementById("play").textContent = "Play the story";
-  document.getElementById("start-note").textContent = `A ${D.period === "month" ? "month" : "year"} with AI coding agents, wrapped. Sound on for the full effect.`;
+  document.getElementById("start-note").textContent = `${D.period === "month" ? "A month" : SHORT ? SPAN : "A year"} with AI coding agents, wrapped. Sound on for the full effect.`;
   document.getElementById("skip").textContent = "Skip to the end";
 }
 
@@ -1362,7 +1741,7 @@ const postLinkedIn = document.getElementById("post-linkedin");
 // Cards you can leave out, and the part of the story each one needs.
 const LEAVABLE = {
   chapters: "chapters", "top-typo": "topTypo", spellings: "spellings", slip: "slip", "top-prompts": "topPrompts", catchphrase: "catchphrase",
-  talk: "talk", night: "night", streak: "streak", agents: "agents", work: "work", shipped: "shipped", money: "money", letter: "letter",
+  talk: "talk", crashouts: "crashouts", night: "night", streak: "streak", agents: "agents", work: "work", shipped: "shipped", money: "money", letter: "letter",
 };
 // ids of the cards left out. Chapters say what you worked on, so they stay
 // out of a link unless you add them.
@@ -1416,9 +1795,6 @@ async function renderShare() {
   const next = PLAYER_URL ? `${PLAYER_URL}#v2.${await pack(toLink(data))}` : "";
   if (mine !== linkFor) return;
   link = next;
-  const url = encodeURIComponent(link);
-  postX.href = `https://x.com/intent/post?text=${encodeURIComponent(shareText(data))}&url=${url}`;
-  postLinkedIn.href = `https://www.linkedin.com/sharing/share-offsite/?url=${url}`;
   for (const el of document.querySelectorAll("[data-needs-link]")) el.hidden = !link;
   document.getElementById("share-link").hidden = !link || typeof navigator.share !== "function";
   document.getElementById("offline").hidden = !!link;
@@ -1463,9 +1839,33 @@ function openShare() {
   document.getElementById("share-title").focus();
 }
 
-document.getElementById("copy-link").addEventListener("click", async () => {
+// The short link for the story as it is now: the site saves the story's
+// code and names it. Without the site, the long link still works.
+let short = { for: "", url: "" };
+async function shortLink() {
+  const mine = link;
+  if (short.for === mine) return short.url;
   try {
-    await navigator.clipboard.writeText(link);
+    const res = await fetch(new URL("/api/share", PLAYER_URL), { method: "POST", body: mine.slice(mine.indexOf("#") + 1) });
+    if (!res.ok) return mine;
+    const { name } = await res.json();
+    short = { for: mine, url: new URL(`/s/${name}`, PLAYER_URL).href };
+    return short.url;
+  } catch {
+    return mine;
+  }
+}
+
+document.getElementById("copy-link").addEventListener("click", async () => {
+  const url = shortLink();
+  try {
+    // Handing the clipboard a promise keeps the click's permission to copy
+    // while the short link is made.
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "text/plain": url.then((u) => new Blob([u], { type: "text/plain" })) })]);
+    } catch {
+      await navigator.clipboard.writeText(await url);
+    }
     notify("Link copied. Paste it anywhere.");
   } catch {
     notify("Couldn't copy the link. Try Share instead.");
@@ -1474,11 +1874,30 @@ document.getElementById("copy-link").addEventListener("click", async () => {
 
 document.getElementById("share-link").addEventListener("click", async () => {
   try {
-    await navigator.share({ title: "Agent Wrapped", text: shareText(sharedData()), url: link });
+    await navigator.share({ title: "Agent Wrapped", text: shareText(sharedData()), url: await shortLink() });
   } catch (err) {
-    if (err?.name !== "AbortError") notify("Couldn't open sharing. Copy the link instead.");
+    // Some browsers only open sharing straight after a tap. The short link
+    // is ready now, so a second tap opens it at once.
+    if (err?.name === "NotAllowedError") notify("Tap Share again to open it.");
+    else if (err?.name !== "AbortError") notify("Couldn't open sharing. Copy the link instead.");
   }
 });
+
+// The post opens in a new tab straight away, so it isn't blocked, and moves
+// to the post once the short link is ready.
+for (const [el, post] of [
+  [postX, (url) => `https://x.com/intent/post?text=${encodeURIComponent(shareText(sharedData()))}&url=${encodeURIComponent(url)}`],
+  [postLinkedIn, (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`],
+]) {
+  el.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const tab = open("about:blank", "_blank");
+    const url = post(await shortLink());
+    if (!tab) return open(url, "_blank", "noopener");
+    tab.opener = null;
+    tab.location.href = url;
+  });
+}
 
 document.getElementById("save-image").addEventListener("click", async () => {
   download(await pngOf(finalFrame(summaryCard(), shape)), `agent-wrapped-${shapeName(shape)}.png`);

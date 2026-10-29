@@ -6,7 +6,7 @@ Your life with AI coding agents, wrapped.
 npx @shadevkumar/agent-wrapped
 ```
 
-It reads your Claude Code, Codex and Cursor logs on your computer and turns them into a short animated story made of keyboard keys, with a quiet lofi loop underneath: your year in chapters, your most-typed typo, every way you've spelled "everything", the key you hit when you meant another, how you talk to your agents, your latest prompt after midnight, your streak, what your agents got done, what you shipped, and what all that work would cost at public API prices. It ends with your personality and a letter from your agents.
+It reads your Claude Code, Codex and Cursor logs on your computer and turns them into a short animated story made of keyboard keys, with a quiet lofi loop underneath: your year in chapters, your most-typed typo, every way you've spelled "everything", the key you hit when you meant another, how you talk to your agents, your crashouts, your latest prompt after midnight, your streak, what your agents got done, what you shipped, and what all that work would cost at public API prices. It ends with your personality and a letter from your agents.
 
 It asks whether to cover everything so far or only the last 30 days. Each card stays up long enough to read it; press Space, the pause button, or press and hold to stop on one.
 
@@ -14,10 +14,10 @@ Then you share it. One link plays your whole story for anyone who opens it, keys
 
 ## What stays private
 
-Nothing is uploaded. The story is one HTML file written to your computer's temp folder and opened in your browser.
+Nothing is uploaded unless you share. The story is one HTML file written to your computer's temp folder and opened in your browser.
 
 - **Your prompts never leave your computer.** The story only quotes everyday words. A quote with a name, a link, a file path, an email, a key or a word the dictionary doesn't know is left out, and so are your folder, repo and organisation names.
-- **Nothing is shared until you share it.** A share link carries your story inside it, after the `#`, which browsers never send to the server. So the public page that plays it never receives or stores your story. Anyone you give the link to can watch it.
+- **Nothing is shared until you share it.** When you share, the site saves what's on your cards so the link can be short. Your prompts and logs never leave your computer. If the site can't be reached, you get a long link that carries the story inside it instead. Anyone you give the link to can watch it.
 - **You see the story before you share it,** and a card you leave out is not in the link at all.
 - **Your year in chapters** splits your year into stretches, each named from the everyday words that set it apart, found on your computer. Words that could be a person's or a private name are left out. Your `claude` command turns those few words into short names; it never sees a prompt. Chapters say what you worked on, so they are left out of a share link unless you add them. With `--no-ai`, a chapter is named by its top words.
 - **The letter** is written by your own `claude` command, if you have one. It gets your numbers and a few quotes that passed the same privacy check as the cards, never your prompts or logs. It doesn't save a session or load any project files. Run with `--no-ai` to use a template letter instead.

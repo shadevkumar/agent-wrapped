@@ -81,7 +81,7 @@ export const SHADEVS_STORY: StoryData = {
     "bothDays": 20
   },
   "money": {
-    "atLeastUsd": 13190,
+    "atLeastUsd": 10908,
     "pricesAsOf": "2026-10-28"
   },
   "talk": {
@@ -128,5 +128,13 @@ export const SHADEVS_STORY: StoryData = {
       "to": "2026-10-25",
       "commits": 109
     }
+  },
+  "crashouts": {
+    "count": 60,
+    "worstDay": {
+      "day": "2026-01-26",
+      "count": 4
+    },
+    "word": "s**t"
   }
 };
