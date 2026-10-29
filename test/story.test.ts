@@ -96,7 +96,13 @@ test("your own story file loads nothing from the internet; only the public page 
   const own = buildHtml(storyData(w, pickPersonality(w), { text: "hi", by: "template" }));
   assert.ok(!own.includes("_vercel") && !own.includes("og:image"));
   assert.ok(!/src="https?:/.test(own));
-  assert.ok(buildHtml(null).includes("/_vercel/insights/script.js"));
+  // Its fonts are inside it, so it opens the same with no internet; only the
+  // public page loads them from the site.
+  assert.equal((own.match(/url\(data:font\/woff2;base64,/g) ?? []).length, 3);
+  assert.ok(!own.includes("/fonts/"));
+  const site = buildHtml(null);
+  assert.ok(site.includes("/_vercel/insights/script.js"));
+  assert.equal((site.match(/url\(\/fonts\/[\w-]+\.woff2\)/g) ?? []).length, 3);
 });
 
 test("the public player page carries no story, only where shared stories play", () => {

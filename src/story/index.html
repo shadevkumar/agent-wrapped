@@ -161,10 +161,9 @@ a.button[hidden] { display: none; }
 /* Home: the keys type moments from Shadev's story; everything else stays quiet. */
 #home {
   background: radial-gradient(110% 60% at 50% -10%, rgba(255, 255, 255, 0.07), transparent 65%), var(--page);
-  animation: appear .35s ease-out both;
 }
-#home > * { animation: appear .5s ease-out .05s both; }
-@keyframes appear { from { opacity: 0; } }
+html.home #home[hidden] { display: grid !important; }
+html.home:not(.fonts-in) #home { visibility: hidden; }
 #home > div { max-width: 780px; }
 .typing {
   --k: min(62px, calc((100vw - 32px - 9 * 8px) / 9.2));
@@ -215,10 +214,11 @@ a.button[hidden] { display: none; }
 .github:hover { color: var(--ink); }
 .github:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .github svg { width: 22px; height: 22px; fill: currentColor; }
-@media (prefers-reduced-motion: reduce) { .typing-note { opacity: 1; } #home, #home > * { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .typing-note { opacity: 1; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
+<!--HOME-->
 </head>
 <body>
 <main class="player" id="player">
