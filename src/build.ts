@@ -48,6 +48,9 @@ export function buildHtml(data: StoryData | null, playerUrl = PLAYER_URL): strin
   const json = JSON.stringify(data).replace(/</g, "\\u003c");
   return readFileSync(join(STORY_DIR, "index.html"), "utf8")
     .replace("<!--HEAD-->", () => (data ? "" : PUBLIC_HEAD))
+    // The public page doesn't know yet whether its link holds a story, so its
+    // player starts hidden instead of flashing an empty frame.
+    .replace('<main class="player" id="player">', (tag) => (data ? tag : '<main class="player" id="player" hidden>'))
     .replace("/*FONTS*/", () => fonts)
     .replace("/*DATA*/", () => json)
     .replace("/*PLAYER_URL*/", () => JSON.stringify(playerUrl).replace(/</g, "\\u003c"))

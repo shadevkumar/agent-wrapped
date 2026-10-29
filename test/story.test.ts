@@ -76,6 +76,9 @@ test("the public player page carries no story, only where shared stories play", 
   const data = html.slice(html.indexOf('id="data">') + 10, html.indexOf("</script>", html.indexOf('id="data">')));
   assert.equal(data, "null");
   assert.ok(html.includes('"https://example.com/\\u003c/script>"'));
+  // Hidden until a story opens, so the home page never flashes an empty player.
+  assert.ok(html.includes('<main class="player" id="player" hidden>'));
+  assert.ok(buildHtml(storyData(wrappedWith(["ok next"]), pickPersonality(wrappedWith([])), { text: "", by: "template" })).includes('<main class="player" id="player">'));
 });
 
 test("the home page's Copy button is set up before the script stops for a link with no story", () => {
