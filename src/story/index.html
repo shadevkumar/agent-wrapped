@@ -192,7 +192,15 @@ a.button[hidden] { display: none; }
   opacity: 0; transition: opacity .4s;
 }
 .typing-note.show { opacity: 1; }
-#home h1 { font-size: clamp(42px, 8.4vw, 76px); font-weight: 650; letter-spacing: -0.045em; line-height: 0.95; margin-bottom: 18px; }
+/* Medium weight, lit from above like a key cap. The fill only paints inside
+   the box, so it's padded to hold the tails of g and p, and each line of a
+   wrapped title gets its own light. */
+#home h1 { font-size: clamp(44px, 9vw, 84px); font-weight: 480; letter-spacing: -0.06em; line-height: 1.02; margin-bottom: 18px; }
+#home h1 span {
+  padding: 0.06em 0.04em 0.16em;
+  background: linear-gradient(180deg, #FFFFFF 30%, #8E9096); -webkit-background-clip: text; background-clip: text; color: transparent;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
 #home .lede { font: italic 400 clamp(19px, 2.6vw, 23px)/1.35 "Newsreader", Georgia, serif; max-width: 30ch; margin-bottom: 36px; }
 #home .row { margin-bottom: 44px; }
 .fine { margin: 0 auto; color: var(--faint); font-size: 13px; line-height: 1.55; }
@@ -280,7 +288,7 @@ a.button[hidden] { display: none; }
   <div>
     <div class="typing" id="home-keys" aria-hidden="true"></div>
     <p class="typing-note" id="home-note" aria-hidden="true"></p>
-    <h1 id="home-title">Agent Wrapped 2026</h1>
+    <h1 id="home-title"><span>Agent Wrapped 2026</span></h1>
     <p class="lede">Your year with Claude Code and Codex, played back in keyboard keys.</p>
     <div class="command">
       <code>npx @shadevkumar/agent-wrapped</code>
