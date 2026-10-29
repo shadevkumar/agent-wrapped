@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { coverage, lastJsonLine, namesFromGitUrl, namesFromPath, toDate } from "../files.ts";
+import { coverage, firstJsonLine, lastJsonLine, namesFromGitUrl, namesFromPath, toDate } from "../files.ts";
 import { commandKinds, emptyHarvest, type Harvest } from "../types.ts";
 
 // Codex keeps, in ~/.codex:
@@ -14,6 +14,7 @@ export function harvestCodex(home: string): Harvest {
   const root = join(home, ".codex");
   const h = emptyHarvest();
   const human = new Map<string, boolean>(); // thread id -> started by a person
+  const forks = forkedThreads(root);
 
   const state = openLatest(root, "state");
   if (state) {
@@ -33,7 +34,7 @@ export function harvestCodex(home: string): Harvest {
         const split = t.rollout_path && existsSync(t.rollout_path) ? rolloutUsage(t.rollout_path) : null;
         if (split) {
           h.usage.push({ agent: "codex", model, at, ...split });
-        } else if (Number(t.tokens_used) > 0) {
+        } else if (Number(t.tokens_used) > 0 && !forks.has(t.id)) {
           h.totals.push({ agent: "codex", model, at, tokens: Number(t.tokens_used) });
         }
       }
@@ -140,23 +141,45 @@ function messageText(json: string): string {
   }
 }
 
-// The thread's final running total. `input_tokens` includes cached tokens.
+// A forked or resumed thread's running total starts from the total of the
+// thread it came from, which is already counted there. Its own tokens are
+// its final total less what it started with, before its first turn.
 function rolloutUsage(path: string) {
-  const row = lastJsonLine(
-    path,
-    '"token_count"',
-    (r) => r.type === "event_msg" && r.payload?.type === "token_count" && !!r.payload.info?.total_token_usage,
-  );
-  const total: Record<string, number> | undefined = row?.payload.info.total_token_usage;
-  if (!total) return null;
-  const cached = total.cached_input_tokens ?? 0;
+  const isCount = (r: Record<string, any>) => r.type === "event_msg" && r.payload?.type === "token_count" && !!r.payload.info?.total_token_usage;
+  const last = lastJsonLine(path, '"token_count"', isCount)?.payload.info;
+  if (!last) return null;
+  const first = firstJsonLine(path, '"token_count"', isCount)?.payload.info;
+  // `input_tokens` includes cached tokens.
+  const own = (key: string) =>
+    (last.total_token_usage[key] ?? 0) - (first.total_token_usage[key] ?? 0) + (first.last_token_usage?.[key] ?? first.total_token_usage[key] ?? 0);
+  const cached = own("cached_input_tokens");
   return {
-    input: (total.input_tokens ?? 0) - cached,
+    input: own("input_tokens") - cached,
     cacheRead: cached,
-    cacheWrite: total.cache_write_input_tokens ?? 0,
+    cacheWrite: own("cache_write_input_tokens"),
     cacheWrite1h: 0,
-    output: total.output_tokens ?? 0,
+    output: own("output_tokens"),
   };
+}
+
+// Threads forked from another, whose log starts with the other thread's
+// history (their first item sits far into it). Their totals include the
+// other thread's tokens, with no way left to tell how many, so a thread
+// known only by its total is left unpriced: the cost stays a floor.
+const FORKED_AFTER_ORDINAL = 100;
+function forkedThreads(root: string): Set<string> {
+  const history = openLatest(root, "thread_history");
+  if (!history) return new Set();
+  try {
+    const rows = history
+      .prepare("select thread_id from thread_items group by thread_id having min(rollout_ordinal) > ?")
+      .all(FORKED_AFTER_ORDINAL) as Record<string, any>[];
+    return new Set(rows.map((r) => String(r.thread_id)));
+  } catch {
+    return new Set();
+  } finally {
+    history.close();
+  }
 }
 
 // Codex numbers its database files (state_5.sqlite); open the newest, read-only.

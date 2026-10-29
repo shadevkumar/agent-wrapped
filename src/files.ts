@@ -59,6 +59,43 @@ export function lastJsonLine(
   }
 }
 
+// The first line containing `needle` that parses and passes `accept`, read
+// from the start a chunk at a time.
+export function firstJsonLine(
+  path: string,
+  needle: string,
+  accept: (row: Record<string, any>) => boolean,
+): Record<string, any> | null {
+  if (!existsSync(path)) return null;
+  const fd = openSync(path, "r");
+  try {
+    const chunk = 1 << 20;
+    const size = fstatSync(fd).size;
+    let rest = Buffer.alloc(0);
+    for (let at = 0; at < size; at += chunk) {
+      const buf = Buffer.alloc(Math.min(chunk, size - at));
+      readSync(fd, buf, 0, buf.length, at);
+      const data = Buffer.concat([rest, buf]);
+      // A line cut at the chunk edge waits for the next read. Split on bytes,
+      // so a character cut in half is never decoded.
+      const end = at + buf.length >= size ? data.length : data.lastIndexOf(0x0a) + 1;
+      for (const line of data.subarray(0, end).toString("utf8").split("\n")) {
+        if (!line.includes(needle)) continue;
+        try {
+          const row = JSON.parse(line);
+          if (row && accept(row)) return row;
+        } catch {
+          // A malformed line; keep looking.
+        }
+      }
+      rest = data.subarray(end);
+    }
+    return null;
+  } finally {
+    closeSync(fd);
+  }
+}
+
 export function readJson(path: string): Record<string, any> | null {
   if (!existsSync(path)) return null;
   try {

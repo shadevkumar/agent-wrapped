@@ -28,6 +28,31 @@ test("a thread is counted once: split from its session file, else its total", ()
   assert.deepEqual(h.totals.map((t) => t.tokens), [777]);
 });
 
+test("a forked thread counts only its own tokens, not the ones it started with", () => {
+  const home = tempHome();
+  const rollout = join(home, ".codex/sessions/2026/10/01/rollout-fork.jsonl");
+  const count = (total: [number, number, number], last: [number, number, number]) => {
+    const usage = ([input, cached, output]: number[]) => ({ input_tokens: input, cached_input_tokens: cached, output_tokens: output });
+    return { type: "event_msg", payload: { type: "token_count", info: { total_token_usage: usage(total), last_token_usage: usage(last) } } };
+  };
+  // Started from its parent's 50,000 input tokens; its own two turns add 700.
+  writeJsonl(rollout, [count([50_300, 40_200, 2_010], [300, 200, 10]), count([50_700, 40_500, 2_030], [400, 300, 20])]);
+  codexStateDb(join(home, ".codex/state_5.sqlite"), [
+    { id: "fork", rollout_path: rollout, tokens_used: 52_730 },
+    // Known only by its total, and its log starts deep into another thread's history.
+    { id: "t", tokens_used: 9_999 },
+    { id: "own", tokens_used: 5 },
+  ]);
+  codexHistoryDb(join(home, ".codex/thread_history_1.sqlite"), [{ thread: "own", at: 1_790_000_000_000, text: "hi" }], {
+    items: [{ type: "agentMessage", at: 1_790_000_000_000, json: { type: "agentMessage", text: "copied" } }],
+    turns: [],
+  });
+  const h = harvestCodex(home);
+  const u = h.usage[0]!;
+  assert.deepEqual({ input: u.input, cacheRead: u.cacheRead, output: u.output }, { input: 200, cacheRead: 500, output: 30 });
+  assert.deepEqual(h.totals.map((t) => t.tokens), [5]);
+});
+
 test("the newest numbered database is read", () => {
   const home = tempHome();
   codexStateDb(join(home, ".codex/state_4.sqlite"), [{ id: "old", tokens_used: 1 }]);
