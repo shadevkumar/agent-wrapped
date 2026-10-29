@@ -19,6 +19,8 @@ export interface StoryData {
   streak: { days: number; from: string; to: string } | null;
   agents: { claude: number; codex: number; hours: number; bothDays: number } | null;
   money: { atLeastUsd: number; pricesAsOf: string } | null;
+  talk: { nickname: { word: string; count: number } | null; please: number; thanks: number; checkIns: number } | null;
+  work: { since: string; tests: number; commits: number; stops: number; languages: string[] } | null;
   personality: Personality;
   letter: Letter;
 }
@@ -30,9 +32,16 @@ export function pickCatchphrase(list: Wrapped["voice"]["catchphrases"]) {
   return list.find((c) => !PLAIN_OPENINGS.test(c.text)) ?? null;
 }
 
+// A count this small isn't a habit yet.
+const HABIT = 20;
+
 export function storyData(w: Wrapped, personality: Personality, letter: Letter): StoryData {
   const family = w.voice.typos.find((f) => f.spellings.length >= 5) ?? null;
   const streak = w.rhythm.longestStreak;
+  const nickname = w.voice.nicknames[0] && w.voice.nicknames[0].count >= HABIT ? w.voice.nicknames[0] : null;
+  const please = w.voice.lexicon.please ?? 0;
+  const thanks = w.voice.lexicon.thanks ?? 0;
+  const wk = w.work;
   return {
     range: w.totals.firstDay && w.totals.lastDay ? { from: w.totals.firstDay, to: w.totals.lastDay } : null,
     prompts: w.totals.prompts,
@@ -56,6 +65,14 @@ export function storyData(w: Wrapped, personality: Personality, letter: Letter):
         }
       : null,
     money: w.cost.atLeastUsd >= 1 ? { atLeastUsd: w.cost.atLeastUsd, pricesAsOf: w.cost.pricesAsOf } : null,
+    talk:
+      nickname || please + thanks >= HABIT || w.voice.checkIns >= HABIT
+        ? { nickname, please, thanks, checkIns: w.voice.checkIns }
+        : null,
+    work:
+      wk.since && wk.tests + wk.commits >= 10
+        ? { since: wk.since, tests: wk.tests, commits: wk.commits, stops: wk.stops, languages: wk.languages.slice(0, 2).map((l) => l.name) }
+        : null,
     personality,
     letter,
   };

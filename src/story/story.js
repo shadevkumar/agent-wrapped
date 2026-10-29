@@ -598,6 +598,29 @@ function buildCards(D) {
     });
   }
 
+  if (D.talk) {
+    const k = D.talk;
+    const word = k.nickname?.word ?? "please";
+    const lines = [
+      k.nickname ? `You called us “${k.nickname.word}” ${num(k.nickname.count)} times.` : `You said please ${num(k.please)} times.`,
+      k.nickname && k.please + k.thanks > 0 && `Please ${num(k.please)} times. Thanks ${num(k.thanks)}.${k.thanks * 3 < k.please ? " We noticed." : ""}`,
+      !k.nickname && `And thanks ${num(k.thanks)} times.`,
+      k.checkIns >= 20 && `And you asked “okay?” ${num(k.checkIns)} times.`,
+    ].filter(Boolean);
+    add({
+      id: "talk", name: "How you talk", dur: 7,
+      alt: `How you talk to us. ${lines.join(" ")}`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, "How you talk to us", 0, { ...say(54), color: cw.soft }),
+      visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(word), 120, 210, t, 0.4, fx, cw, { step: 0.16 }),
+      words(ctx, t, fx, cw, b) {
+        let y = text(ctx, b, lines[0], 0, { ...big(72), color: cw.ink, alpha: fade(t, 1.4) });
+        lines.slice(1).forEach((line, i) => {
+          y = text(ctx, b, line, y + 18, { ...say(), color: cw.soft, alpha: fade(t, 2.2 + i * 0.8) });
+        });
+      },
+    });
+  }
+
   if (D.night) {
     const n = D.night;
     add({
@@ -666,6 +689,39 @@ function buildCards(D) {
         text(ctx, b, `Some days you needed both of us. ${num(a.bothDays)} of them, to be exact.`, 0, {
           ...say(), color: cw.soft, alpha: fade(t, 2),
         }),
+    });
+  }
+
+  if (D.work) {
+    const w = D.work;
+    const rows = [["ran your tests", w.tests], ["made commits", w.commits], ["got stopped by you", w.stops]].filter(([, n]) => n > 0);
+    const most = Math.max(...rows.map(([, n]) => n));
+    const last = 0.6 + (rows.length - 1) * 0.35;
+    add({
+      id: "work", name: "What we did", dur: 7,
+      alt: `What we got done, since ${day(w.since)}: ${rows.map(([what, n]) => `${what}, ${num(n)} times`).join("; ")}.${w.languages.length ? ` Mostly in ${w.languages.join(" and ")}.` : ""}`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, "What we got done", 0, { ...big(70), color: cw.ink }),
+      visual(ctx, t, fx, cw, b) {
+        rows.forEach(([what, n], i) => {
+          const at = 0.6 + i * 0.35;
+          fx.key(at);
+          const local = REDUCED ? 9 : t - at;
+          if (local < 0) return;
+          const label = { text: what, size: 44, family: "Geist", weight: 500 };
+          const right = { text: `${num(n)}×`, size: 40, family: "Geist", weight: 400 };
+          const least = textWidth(ctx, label.text, 46, label) + textWidth(ctx, right.text, 46, right) + 140;
+          const width = Math.min(b.w, least + (b.w - least) * (n / most) * easeOut(local / 0.5));
+          cap(ctx, b.x + width / 2, 80 + i * 190, width, 140, "", { ...cw, left: true, lines: [label], right, press: pressAt(local) });
+        });
+      },
+      words(ctx, t, fx, cw, b) {
+        const y = w.languages.length
+          ? text(ctx, b, `Mostly in ${w.languages.join(" and ")}.`, 0, { ...say(), color: cw.soft, alpha: fade(t, last + 0.5) }) + 20
+          : 0;
+        text(ctx, b, `Counted from the logs your agents keep, since ${day(w.since)}.`, y, {
+          size: 34, color: cw.faint, alpha: fade(t, last + 1.2),
+        });
+      },
     });
   }
 
@@ -1018,7 +1074,7 @@ const postLinkedIn = document.getElementById("post-linkedin");
 // Cards you can leave out, and the part of the story each one needs.
 const LEAVABLE = {
   "top-typo": "topTypo", spellings: "spellings", slip: "slip", "top-prompts": "topPrompts", catchphrase: "catchphrase",
-  night: "night", streak: "streak", agents: "agents", money: "money", letter: "letter",
+  talk: "talk", night: "night", streak: "streak", agents: "agents", work: "work", money: "money", letter: "letter",
 };
 const left = new Set(); // ids of the cards left out
 let link = "";

@@ -44,6 +44,25 @@ export interface Turn {
   durationMs: number;
 }
 
+// Something an agent did, or a time it was stopped. Only the kind is kept, and
+// for an edit the file's extension: never a command, a path or any output.
+export interface Action {
+  agent: Agent;
+  at: Date;
+  kind: "test" | "commit" | "edit" | "stop";
+  ext?: string; // ".py", for an edit
+}
+
+// Commands that run a project's tests, and ones that make a commit.
+const TEST_COMMAND = /\b(pytest|vitest|jest|mocha|go test|cargo test|npm (run )?test|pnpm (run )?test|yarn test|bun test|node --test|tests?\.sh|phpunit|rspec)\b/;
+const COMMIT_COMMAND = /\bgit commit\b/;
+
+export function commandKind(command: string): "test" | "commit" | null {
+  if (COMMIT_COMMAND.test(command)) return "commit";
+  if (TEST_COMMAND.test(command)) return "test";
+  return null;
+}
+
 // What each source covered, so the story can be honest about gaps.
 export interface Coverage {
   agent: Agent;
@@ -58,13 +77,14 @@ export interface Harvest {
   usage: Usage[];
   totals: TokenTotal[];
   turns: Turn[];
+  actions: Action[];
   coverage: Coverage[];
   // Folder, repo and org names from the logs. Never shown in a quote.
   privateNames: Set<string>;
 }
 
 export function emptyHarvest(): Harvest {
-  return { prompts: [], usage: [], totals: [], turns: [], coverage: [], privateNames: new Set() };
+  return { prompts: [], usage: [], totals: [], turns: [], actions: [], coverage: [], privateNames: new Set() };
 }
 
 export function mergeHarvests(parts: Harvest[]): Harvest {
@@ -74,6 +94,7 @@ export function mergeHarvests(parts: Harvest[]): Harvest {
     out.usage.push(...p.usage);
     out.totals.push(...p.totals);
     out.turns.push(...p.turns);
+    out.actions.push(...p.actions);
     out.coverage.push(...p.coverage);
     for (const n of p.privateNames) out.privateNames.add(n);
   }

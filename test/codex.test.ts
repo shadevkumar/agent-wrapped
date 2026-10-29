@@ -57,6 +57,24 @@ test("cleaning a wrapped request", () => {
   assert.equal(cleanCodexPrompt("<environment_context>cwd</environment_context>\nnext"), "next");
 });
 
+test("commands, file edits and stopped turns become actions, without their output", () => {
+  const home = tempHome();
+  const at = 1_790_000_000_000;
+  const huge = "x".repeat(50_000);
+  codexHistoryDb(join(home, ".codex/thread_history_1.sqlite"), [], {
+    items: [
+      { type: "commandExecution", at, json: { type: "commandExecution", command: "/bin/zsh -lc 'uv run pytest -q'", aggregatedOutput: huge } },
+      { type: "commandExecution", at, json: { type: "commandExecution", command: "git commit -m \"fix \\\"quotes\\\"\"", aggregatedOutput: "" } },
+      { type: "commandExecution", at, json: { type: "commandExecution", command: "ls -la", aggregatedOutput: "" } },
+      { type: "fileChange", at, json: { type: "fileChange", changes: [{ path: "/Users/me/acmecorp/app.tsx", kind: "update", diff: huge }] } },
+      { type: "agentMessage", at, json: { type: "agentMessage", text: "git commit" } },
+    ],
+    turns: [{ at: at / 1000, status: "interrupted" }, { at: at / 1000, status: "completed" }],
+  });
+  const kinds = harvestCodex(home).actions.map((a) => [a.kind, a.ext ?? null]).sort();
+  assert.deepEqual(kinds, [["commit", null], ["edit", ".tsx"], ["stop", null], ["test", null]]);
+});
+
 test("a changed Codex schema is reported as missing, not a crash", () => {
   const home = tempHome();
   const db = new DatabaseSync(join(home, ".codex-tmp.sqlite"));

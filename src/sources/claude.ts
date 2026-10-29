@@ -1,6 +1,6 @@
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { coverage, findFiles, localDay, namesFromPath, readJson, readJsonl, toDate } from "../files.ts";
-import { emptyHarvest, type Harvest, type Usage } from "../types.ts";
+import { type Action, commandKind, emptyHarvest, type Harvest, type Usage } from "../types.ts";
 
 // Claude Code keeps three things in ~/.claude:
 // - history.jsonl: every prompt typed, kept long term
@@ -44,14 +44,24 @@ export function harvestClaude(home: string): Harvest {
   // usage, and copies history into resumed sessions. Count each reply once.
   const replies = new Map<string, Usage>();
   const turnIds = new Set<string>();
-  // Only replies and turn timings matter here; tool output and attachments,
-  // most of each file, are skipped without being decoded.
-  const relevant = (line: string) => line.includes('"type":"assistant"') || line.includes('"turn_duration"');
+  const actionIds = new Set<string>();
+  // Only replies, turn timings and stops matter here; tool output and
+  // attachments, most of each file, are skipped without being decoded.
+  const relevant = (line: string) =>
+    line.includes('"type":"assistant"') || line.includes('"turn_duration"') || line.includes(INTERRUPTED);
   for (const file of findFiles(join(root, "projects"), ".jsonl")) {
     for (const row of readJsonl(file, relevant)) {
       if (typeof row.cwd === "string") addNames(h, namesFromPath(row.cwd));
       const at = toDate(row.timestamp);
-      if (!at || (statsDay && localDay(at) <= statsDay)) continue;
+      if (!at) continue;
+      // What the agent did, and when it was stopped, counts once each, even
+      // when a resumed session copies it.
+      for (const [id, action] of actionsIn(row)) {
+        if (actionIds.has(id)) continue;
+        actionIds.add(id);
+        h.actions.push({ agent: "claude", at, ...action });
+      }
+      if (statsDay && localDay(at) <= statsDay) continue;
 
       if (row.type === "system" && row.subtype === "turn_duration" && num(row.durationMs) > 0) {
         const id = String(row.uuid ?? `${row.sessionId}|${row.timestamp}`);
@@ -84,6 +94,29 @@ export function harvestClaude(home: string): Harvest {
   h.usage.push(...replies.values());
   h.coverage.push(coverage("claude", "replies", [...replies.values()].map((u) => u.at)));
   return h;
+}
+
+const INTERRUPTED = "[Request interrupted by user";
+const EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write", "NotebookEdit"]);
+
+// The tests, commits and edits in a reply, and a stop in a user line, each
+// with an id to count it once by.
+function actionsIn(row: any): [string, Pick<Action, "kind" | "ext">][] {
+  const content = row.message?.content;
+  if (row.type === "user") {
+    const text = typeof content === "string" ? content : Array.isArray(content) ? content.map((b: any) => b?.text ?? "").join("") : "";
+    return text.includes(INTERRUPTED) ? [[`stop|${row.uuid ?? row.timestamp}`, { kind: "stop" }]] : [];
+  }
+  if (row.type !== "assistant" || !Array.isArray(content)) return [];
+  const out: [string, Pick<Action, "kind" | "ext">][] = [];
+  for (const b of content) {
+    if (b?.type !== "tool_use" || typeof b.id !== "string") continue;
+    const path = b.input?.file_path ?? b.input?.notebook_path;
+    if (EDIT_TOOLS.has(b.name) && typeof path === "string") out.push([b.id, { kind: "edit", ext: extname(path).toLowerCase() }]);
+    const kind = b.name === "Bash" ? commandKind(String(b.input?.command ?? "")) : null;
+    if (kind) out.push([b.id, { kind }]);
+  }
+  return out;
 }
 
 // Drops slash and shell commands and paste placeholders; keeps what was typed.

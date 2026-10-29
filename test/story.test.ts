@@ -17,6 +17,34 @@ function wrappedWith(prompts: string[], hourUtc = 14): Wrapped {
   return computeWrapped(h, new Words([], new Set("ok next fix it make sure nothing breaks".split(" "))));
 }
 
+test("how you talk shows the nickname you use most, only once it's a habit", () => {
+  const p = pickPersonality(wrappedWith([]));
+  const letter = { text: "", by: "template" as const };
+  const story = (prompts: string[]) => storyData(wrappedWith(prompts), p, letter);
+  const shown = story([...Array(20).fill("ok dude next"), ...Array(5).fill("fix it bro"), "please fix it"]).talk;
+  assert.deepEqual(shown?.nickname, { word: "dude", count: 20 });
+  assert.equal(shown?.please, 1);
+  assert.equal(story([...Array(19).fill("ok dude next"), "okay?"]).talk, null);
+  assert.equal(story(Array(20).fill("next okay?")).talk?.checkIns, 20);
+});
+
+test("what the agents did starts at their first test, commit or edit, not at older stops", () => {
+  const h = emptyHarvest();
+  const at = (day: number) => new Date(Date.UTC(2026, 5, day, 12));
+  h.actions.push({ agent: "codex", at: at(1), kind: "stop" });
+  h.actions.push(...Array.from({ length: 8 }, (_, i) => ({ agent: "codex" as const, at: at(10 + i), kind: "test" as const })));
+  h.actions.push({ agent: "claude", at: at(20), kind: "commit" }, { agent: "claude", at: at(21), kind: "edit", ext: ".tsx" });
+  h.actions.push({ agent: "claude", at: at(22), kind: "edit", ext: ".md" });
+  const w = computeWrapped(h, new Words([], new Set()));
+  assert.equal(w.work.since, "2026-06-10");
+  assert.deepEqual(w.work.languages, [{ name: "TypeScript", edits: 1 }]);
+  const p = pickPersonality(w);
+  // 9 tests and commits is not enough for a card; one more is.
+  assert.equal(storyData(w, p, { text: "", by: "template" }).work, null);
+  h.actions.push({ agent: "codex", at: at(25), kind: "commit" });
+  assert.equal(storyData(computeWrapped(h, new Words([], new Set())), p, { text: "", by: "template" }).work?.commits, 2);
+});
+
 test("the catchphrase skips phrases everyone types", () => {
   const picked = pickCatchphrase([
     { text: "let me know", sessions: 100 },

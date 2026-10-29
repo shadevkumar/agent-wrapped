@@ -39,15 +39,25 @@ export function codexStateDb(path: string, threads: Record<string, unknown>[]) {
   db.close();
 }
 
-export function codexHistoryDb(path: string, messages: { thread: string; at: number; text: string }[]) {
+export function codexHistoryDb(
+  path: string,
+  messages: { thread: string; at: number; text: string }[],
+  activity?: { items: { type: string; at: number; json: object }[]; turns: { at: number; status: string }[] },
+) {
   mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
+  // Older histories have no `status` on turns; a test without activity gets that shape.
   db.exec(`create table thread_items (thread_id text, turn_id text, item_id text, rollout_ordinal integer,
     created_at_ms integer, item_json text, item_type text);
-    create table thread_turns (thread_id text, turn_id text, started_at integer, duration_ms integer);`);
-  const insert = db.prepare("insert into thread_items values (?, 't', ?, ?, ?, ?, 'userMessage')");
+    create table thread_turns (thread_id text, turn_id text, started_at integer, duration_ms integer${activity ? ", status text" : ""});`);
+  const insert = db.prepare("insert into thread_items values (?, 't', ?, ?, ?, ?, ?)");
   messages.forEach((m, i) => {
-    insert.run(m.thread, `item${i}`, i, m.at, JSON.stringify({ type: "userMessage", content: [{ type: "text", text: m.text }] }));
+    insert.run(m.thread, `item${i}`, i, m.at, JSON.stringify({ type: "userMessage", content: [{ type: "text", text: m.text }] }), "userMessage");
   });
+  activity?.items.forEach((it, i) => insert.run("t", `act${i}`, 1000 + i, it.at, JSON.stringify(it.json), it.type));
+  if (activity) {
+    const turn = db.prepare("insert into thread_turns values ('t', ?, ?, 1000, ?)");
+    activity.turns.forEach((t, i) => turn.run(`turn${i}`, t.at, t.status));
+  }
   db.close();
 }

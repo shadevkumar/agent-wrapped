@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { coverage, lastJsonLine, namesFromGitUrl, namesFromPath, toDate } from "../files.ts";
-import { emptyHarvest, type Harvest } from "../types.ts";
+import { commandKind, emptyHarvest, type Harvest } from "../types.ts";
 
 // Codex keeps, in ~/.codex:
 // - state_N.sqlite `threads`: one row per thread, with its token total
@@ -71,11 +71,52 @@ export function harvestCodex(home: string): Harvest {
       }
     } catch {
       // Without turn timings the story skips agent hours; prompts still count.
+    }
+    try {
+      for (const t of history.prepare("select started_at from thread_turns where status = 'interrupted'").all() as Record<string, any>[]) {
+        const at = toDate(Number(t.started_at) * 1000);
+        if (at) h.actions.push({ agent: "codex", at, kind: "stop" });
+      }
+    } catch {
+      // Older histories don't record how a turn ended.
+    }
+    try {
+      // Each item also holds the command's output or the file's diff, often
+      // far larger than the rest, so only its start is read: the command or
+      // the first file path is near the top.
+      const items = history
+        .prepare(`select item_type, created_at_ms, substr(item_json, 1, 1200) as head from thread_items
+          where item_type in ('commandExecution', 'fileChange')`)
+        .all() as Record<string, any>[];
+      for (const item of items) {
+        const at = toDate(Number(item.created_at_ms));
+        if (!at) continue;
+        if (item.item_type === "fileChange") {
+          const path = firstString(item.head, "path");
+          if (path) h.actions.push({ agent: "codex", at, kind: "edit", ext: extname(path).toLowerCase() });
+        } else {
+          const kind = commandKind(firstString(item.head, "command") ?? "");
+          if (kind) h.actions.push({ agent: "codex", at, kind });
+        }
+      }
+    } catch {
+      // Without these the story skips what the agents did; the rest still works.
     } finally {
       history.close();
     }
   }
   return h;
+}
+
+// The first "key":"value" string in a piece of JSON that may be cut off.
+function firstString(json: string, key: string): string | null {
+  const m = json.match(new RegExp(`"${key}":("(?:[^"\\\\]|\\\\.)*")`));
+  if (!m) return null;
+  try {
+    return JSON.parse(m[1]!);
+  } catch {
+    return null;
+  }
 }
 
 // The Codex app wraps a typed request with IDE context and tagged blocks.

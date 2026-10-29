@@ -79,6 +79,31 @@ test("prompt history keeps typed words and drops commands, pastes and broken lin
   assert.ok(h.privateNames.has("acmeportal"));
 });
 
+test("tests, commits, edits and stops are counted once each, as kinds only", () => {
+  const home = tempHome();
+  writeFile(join(home, ".claude/stats-cache.json"), JSON.stringify({ lastComputedDate: "2026-10-25", modelUsage: {} }));
+  const tool = (id: string, name: string, input: object) => ({ type: "tool_use", id, name, input });
+  const turn = {
+    type: "assistant", timestamp: "2026-10-20T10:00:00Z",
+    message: { id: "m1", content: [
+      { type: "text", text: "Running them now." },
+      tool("t1", "Bash", { command: "cd app && npm test -- --watch=false" }),
+      tool("t2", "Bash", { command: "git add -A && git commit -m 'ship /Users/me/acmecorp'" }),
+      tool("t3", "Bash", { command: "ls -la" }),
+      tool("t4", "Edit", { file_path: "/Users/me/acmecorp/billing.PY", old_string: "a", new_string: "b" }),
+      tool("t5", "Read", { file_path: "/Users/me/acmecorp/notes.md" }),
+    ] },
+  };
+  const stop = { type: "user", uuid: "u1", timestamp: "2026-10-20T10:02:00Z", message: { role: "user", content: [{ type: "text", text: "[Request interrupted by user]" }] } };
+  writeJsonl(join(home, ".claude/projects/p/s1.jsonl"), [turn, stop]);
+  // A resumed session copies the same turn and stop.
+  writeJsonl(join(home, ".claude/projects/p/s2.jsonl"), [turn, stop]);
+
+  const h = harvestClaude(home);
+  assert.deepEqual(h.actions.map((a) => [a.kind, a.ext ?? null]).sort(), [["commit", null], ["edit", ".py"], ["stop", null], ["test", null]]);
+  assert.ok(!JSON.stringify(h.actions).includes("acmecorp"));
+});
+
 test("no Claude folder gives an empty harvest", () => {
   const h = harvestClaude(tempHome());
   assert.equal(h.prompts.length, 0);

@@ -38,8 +38,19 @@ export interface Wrapped {
     pastedShare: number; // prompts that include text pasted into other prompts
     doubleSends: number;
     lexicon: Record<string, number>;
+    nicknames: { word: string; count: number }[]; // what you call your agent, most first
+    checkIns: number; // prompts asking "okay?" or "right?"
   };
   loyalty: { claudeShare: number; codexShare: number; bothAgentDays: number };
+  // What the agents did. The logs keep this for less time than prompts.
+  work: {
+    since: string | null;
+    tests: number;
+    commits: number;
+    edits: number;
+    stops: number; // times you stopped an agent mid-answer
+    languages: { name: string; edits: number }[];
+  };
 }
 
 export interface AgentStats {
@@ -69,6 +80,19 @@ const LEXICON: Record<string, string[]> = {
   again: ["again"],
   wait: ["wait"],
   perfect: ["perfect", "great", "awesome", "nice"],
+};
+
+const NICKNAMES = ["dude", "bro", "man", "buddy", "mate", "bhai", "boss", "chief", "fam"];
+const CHECK_IN = /\b(okay|ok|right)\s*\?/i;
+
+// File types that are code, by the language they're written in.
+const LANGUAGES: Record<string, string> = {
+  ".py": "Python", ".ts": "TypeScript", ".tsx": "TypeScript", ".js": "JavaScript", ".jsx": "JavaScript",
+  ".mjs": "JavaScript", ".cjs": "JavaScript", ".go": "Go", ".rs": "Rust", ".rb": "Ruby", ".java": "Java",
+  ".kt": "Kotlin", ".swift": "Swift", ".c": "C", ".h": "C", ".cpp": "C++", ".cc": "C++", ".hpp": "C++",
+  ".cs": "C#", ".php": "PHP", ".dart": "Dart", ".scala": "Scala", ".ex": "Elixir", ".exs": "Elixir",
+  ".lua": "Lua", ".sql": "SQL", ".sh": "Shell", ".css": "CSS", ".scss": "CSS", ".html": "HTML",
+  ".vue": "Vue", ".svelte": "Svelte",
 };
 
 export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): Wrapped {
@@ -119,12 +143,40 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
       pastedShare: share(pasted.filter((flags) => flags.some(Boolean)).length, prompts.length),
       doubleSends: doubleSends(prompts),
       lexicon: lexicon(tokenized),
+      nicknames: nicknames(tokenized),
+      checkIns: prompts.filter((p) => CHECK_IN.test(p.text)).length,
     },
     loyalty: {
       claudeShare: share(agents.claude.prompts, prompts.length),
       codexShare: share(agents.codex.prompts, prompts.length),
       bothAgentDays: bothAgentDays(prompts),
     },
+    work: work(h),
+  };
+}
+
+function nicknames(tokenized: string[][]): { word: string; count: number }[] {
+  const counts = new Map(NICKNAMES.map((w) => [w, 0]));
+  for (const toks of tokenized) for (const w of toks) if (counts.has(w)) counts.set(w, counts.get(w)! + 1);
+  return [...counts].filter(([, n]) => n > 0).map(([word, count]) => ({ word, count })).sort((a, b) => b.count - a.count);
+}
+
+function work(h: Harvest): Wrapped["work"] {
+  const count = (kind: string) => h.actions.filter((a) => a.kind === kind).length;
+  const byLanguage = new Map<string, number>();
+  for (const a of h.actions) {
+    const name = a.kind === "edit" && a.ext ? LANGUAGES[a.ext] : undefined;
+    if (name) byLanguage.set(name, (byLanguage.get(name) ?? 0) + 1);
+  }
+  // Stops are kept far longer than the rest, so they don't move the start.
+  const first = h.actions.reduce<Date | null>((min, a) => (a.kind !== "stop" && (!min || a.at < min) ? a.at : min), null);
+  return {
+    since: first ? localDay(first) : null,
+    tests: count("test"),
+    commits: count("commit"),
+    edits: count("edit"),
+    stops: count("stop"),
+    languages: [...byLanguage].map(([name, edits]) => ({ name, edits })).sort((a, b) => b.edits - a.edits),
   };
 }
 

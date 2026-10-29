@@ -29,6 +29,10 @@ export function factsFor(w: Wrapped, p: Personality): string {
     ...w.voice.topPrompts.slice(0, 3).map((t) => `They typed "${t.text}" ${t.count} times.`),
     ...w.voice.catchphrases.slice(0, 2).map((c) => `Catchphrase "${c.text}" in ${c.sessions} sessions.`),
     ...w.voice.typos.slice(0, 2).map((t) => `They spelled "${t.word}" ${t.spellings.length} wrong ways, like "${t.spellings[0]?.spelling}".`),
+    w.voice.nicknames[0] ? `They called their agents "${w.voice.nicknames[0].word}" ${w.voice.nicknames[0].count} times.` : "",
+    `They said please ${w.voice.lexicon.please ?? 0} times and thanks ${w.voice.lexicon.thanks ?? 0} times.`,
+    w.work.tests ? `Their agents ran their tests ${w.work.tests} times and made ${w.work.commits} commits.` : "",
+    w.work.stops ? `They stopped their agents mid-answer ${w.work.stops} times.` : "",
   ];
   return facts.filter(Boolean).join("\n");
 }

@@ -7,13 +7,13 @@ export const SHADEVS_STORY: StoryData = {
     "from": "2026-01-22",
     "to": "2026-10-29"
   },
-  "prompts": 12271,
+  "prompts": 12288,
   "activeDays": 166,
   "sessions": 415,
   "topTypo": {
     "spelling": "teh",
     "word": "the",
-    "count": 2477
+    "count": 2485
   },
   "spellings": {
     "word": "everything",
@@ -52,7 +52,7 @@ export const SHADEVS_STORY: StoryData = {
   "slip": {
     "meant": "h",
     "hit": "n",
-    "count": 222
+    "count": 223
   },
   "topPrompts": [
     {
@@ -86,26 +86,45 @@ export const SHADEVS_STORY: StoryData = {
     "to": "2026-10-09"
   },
   "agents": {
-    "claude": 0.297,
-    "codex": 0.703,
-    "hours": 670.3,
+    "claude": 0.298,
+    "codex": 0.702,
+    "hours": 671.1,
     "bothDays": 20
   },
   "money": {
-    "atLeastUsd": 13173.75031954001,
+    "atLeastUsd": 13189.532846140008,
     "pricesAsOf": "2026-10-28"
+  },
+  "talk": {
+    "nickname": {
+      "word": "man",
+      "count": 549
+    },
+    "please": 862,
+    "thanks": 74,
+    "checkIns": 1977
+  },
+  "work": {
+    "since": "2026-06-01",
+    "tests": 2314,
+    "commits": 378,
+    "stops": 408,
+    "languages": [
+      "Python",
+      "TypeScript"
+    ]
   },
   "personality": {
     "id": "fast-fingers",
     "name": "Fast Fingers",
-    "line": "21,087 typos and your agents understood every one. Speed over spelling.",
+    "line": "21,133 typos and your agents understood every one. Speed over spelling.",
     "traits": [
       "The Midnight Foreman",
       "The Marathoner"
     ]
   },
   "letter": {
-    "text": "We have read “evrything” and “wnat” and decoded both without complaint. That is 21,087 typos, and we want credit for every one. Meanwhile you said “let me know” in 106 sessions and “tell me what” in 104, so we know you are a person of deep curiosity and zero patience. You typed “continue” 52 times, and we did. You also had a prompt land at 04:59, which is not a work schedule, it is a cry for help. Thanks for the 670 hours. Please sleep.\n\nYour agents",
+    "text": "We read “evrything” and “wnat” and understood you perfectly, which is either a skill or a cry for help. You called us “man” 549 times, and we liked it every time. You said please 862 times and thanks only 74, so we assume the rest was implied. You also stopped us mid-answer 408 times, usually right before the good part. Still, 671 hours together and 2314 test runs later, we would do it again. Keep typing fast. We will keep up.\n\nStill here, your agents",
     "by": "claude"
   }
 };
