@@ -6,7 +6,7 @@ import { templateLetter, writeLetter } from "../src/letter.ts";
 import { computeWrapped, type Wrapped } from "../src/moments.ts";
 import { pickPersonality } from "../src/personality.ts";
 import { pickCatchphrase, storyData } from "../src/story.ts";
-import { emptyHarvest } from "../src/types.ts";
+import { commandKinds, emptyHarvest } from "../src/types.ts";
 import { Words } from "../src/words.ts";
 
 function wrappedWith(prompts: string[], hourUtc = 14): Wrapped {
@@ -45,6 +45,29 @@ test("what the agents did starts at their first test, commit or edit, not at old
   assert.equal(storyData(computeWrapped(h, new Words([], new Set())), p, { text: "", by: "template" }).work?.commits, 2);
 });
 
+test("one command can ship in several ways, and the biggest week runs Monday to Sunday", () => {
+  assert.deepEqual(commandKinds('pytest -q && git commit -m "Fix" && git push origin main'), ["test", "commit", "push"]);
+  assert.deepEqual(commandKinds("gh pr create --fill"), ["pr"]);
+  assert.deepEqual(commandKinds("npm publish --access public"), ["deploy"]);
+  assert.deepEqual(commandKinds("git status && vercel ls"), []);
+
+  const h = emptyHarvest();
+  // Sunday Jun 7 belongs to the week of Monday Jun 1; Monday Jun 8 starts the next.
+  const at = (day: number) => new Date(2026, 5, day, 12);
+  for (const day of [1, 3, 7, 7, 8]) h.actions.push({ agent: "codex", at: at(day), kind: "commit" });
+  for (const kind of ["push", "push", "pr", "deploy"] as const) h.actions.push({ agent: "codex", at: at(9), kind });
+  const p = pickPersonality(computeWrapped(h, new Words([], new Set())));
+  const story = (extra: number) => {
+    for (let i = 0; i < extra; i++) h.actions.push({ agent: "codex", at: at(10), kind: "push" });
+    return storyData(computeWrapped(h, new Words([], new Set())), p, { text: "", by: "template" }).shipped;
+  };
+  // Four is not enough for a card; five is. A week of four commits is no "biggest week".
+  assert.equal(story(0), null);
+  assert.deepEqual(story(1), { since: "2026-06-01", pushes: 3, prs: 1, deploys: 1, biggestWeek: null });
+  for (let i = 0; i < 2; i++) h.actions.push({ agent: "codex", at: at(2), kind: "commit" });
+  assert.deepEqual(story(0)?.biggestWeek, { from: "2026-06-01", to: "2026-06-07", commits: 6 });
+});
+
 test("the catchphrase skips phrases everyone types", () => {
   const picked = pickCatchphrase([
     { text: "let me know", sessions: 100 },
@@ -70,13 +93,13 @@ test("late nights pick the Midnight Foreman", () => {
   assert.equal(pickPersonality(w).name, "The Midnight Foreman");
 });
 
-test("without the Claude CLI, the template letter is used", () => {
+test("without the Claude CLI, the template letter is used", async () => {
   const w = wrappedWith(["ok next", "ok next", "ok next", "fix it"]);
   const p = pickPersonality(w);
   const path = process.env.PATH;
   process.env.PATH = "/nonexistent";
   try {
-    const letter = writeLetter(w, p);
+    const letter = await writeLetter(w, p);
     assert.equal(letter.by, "template");
     assert.equal(letter.text, templateLetter(w, p));
   } finally {

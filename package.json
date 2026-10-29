@@ -1,6 +1,6 @@
 {
   "name": "@shadevkumar/agent-wrapped",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Your year with AI coding agents, played back in keyboard keys. Reads Claude Code and Codex logs on your computer.",
   "keywords": [
     "claude-code",

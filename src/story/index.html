@@ -81,6 +81,10 @@ canvas#stage { width: 100%; height: 100%; display: block; touch-action: manipula
 .bars i { display: block; height: 100%; width: 0; background: var(--ink); }
 .controls { position: absolute; top: 28px; right: 16px; display: flex; gap: 8px; transition: opacity .5s; }
 .controls button { padding: 9px 12px 10px; font-size: 12px; }
+.controls button.icon { padding: 9px 11px 10px; }
+.icon svg { display: block; width: 12px; height: 12px; fill: currentColor; }
+.icon .tri, .icon[aria-pressed="true"] .bar { display: none; }
+.icon[aria-pressed="true"] .tri { display: inline; }
 .idle .controls { opacity: 0; }
 .idle .controls:focus-within { opacity: 1; }
 
@@ -226,6 +230,7 @@ html.home:not(.fonts-in) #home { visibility: hidden; }
     <canvas id="stage" width="1080" height="1920" aria-hidden="true"></canvas>
     <div class="bars" id="bars"></div>
     <div class="controls">
+      <button id="pause" class="icon" aria-pressed="false" aria-label="Pause" aria-keyshortcuts="Space"><svg viewBox="0 0 12 12" aria-hidden="true"><rect class="bar" x="2" y="1.5" width="2.6" height="9" rx="0.6"/><rect class="bar" x="7.4" y="1.5" width="2.6" height="9" rx="0.6"/><path class="tri" d="M3 1.6v8.8a.6.6 0 0 0 .9.5l7-4.4a.6.6 0 0 0 0-1l-7-4.4a.6.6 0 0 0-.9.5z"/></svg></button>
       <button id="sound" aria-pressed="true">Sound on</button>
       <button id="save-now">Save this card</button>
       <button id="skip">Skip to sharing</button>
@@ -233,7 +238,7 @@ html.home:not(.fonts-in) #home { visibility: hidden; }
     <div class="start" id="start">
       <div>
         <button class="primary" id="play">Play my story</button>
-        <p id="start-note">Sound on for the full effect. Tap the right side to go on, the left to go back. Press S to save a card.</p>
+        <p id="start-note">Sound on for the full effect. Tap the right side to go on, the left to go back. Space pauses, and S saves a card.</p>
       </div>
     </div>
   </div>
@@ -269,7 +274,7 @@ html.home:not(.fonts-in) #home { visibility: hidden; }
 <section class="ending" id="ending" aria-labelledby="ending-title" hidden>
   <div>
     <h1 id="ending-title" tabindex="-1">Make your own</h1>
-    <p class="lede">Run this in your terminal. It reads your Claude Code and Codex logs on your computer, and nothing leaves it unless you share.</p>
+    <p class="lede">Run this in your terminal. It reads your Claude Code, Codex and Cursor logs on your computer, and nothing leaves it unless you share.</p>
     <div class="command">
       <code>npx @shadevkumar/agent-wrapped</code>
       <button class="primary" data-copy-command>Copy</button>
@@ -292,7 +297,7 @@ html.home:not(.fonts-in) #home { visibility: hidden; }
     <div class="typing" id="home-keys" aria-hidden="true"></div>
     <p class="typing-note" id="home-note" aria-hidden="true"></p>
     <h1 id="home-title"><span>Agent Wrapped 2026</span></h1>
-    <p class="lede">Your year with Claude Code and Codex, played back in keyboard keys.</p>
+    <p class="lede">Your year with Claude Code, Codex and Cursor, played back in keyboard keys.</p>
     <div class="command">
       <code>npx @shadevkumar/agent-wrapped</code>
       <button class="primary" data-copy-command>Copy</button>

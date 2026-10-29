@@ -27,13 +27,16 @@ const STOPWORDS = new Set(
 
 export class Words {
   private dict: Set<string>;
+  private people: Set<string>;
   private blocked: Set<string>;
 
   // `names` are private names (folders, repos, orgs) that never appear in a
   // quote. A name is always blocked; its parts ("acme" in "acme-portal") are
   // blocked unless they are everyday words ("the" in "bridge-the-gap").
-  constructor(names: Iterable<string>, dict?: Set<string>) {
+  // `people` are words the dictionary also lists as a name ("Mary", "Jack").
+  constructor(names: Iterable<string>, dict?: Set<string>, people?: Set<string>) {
     this.dict = dict ?? loadDictionary(SYSTEM_DICTIONARY);
+    this.people = people ?? (dict ? new Set() : loadNames(SYSTEM_DICTIONARY));
     this.blocked = new Set();
     for (const name of names) {
       const lower = name.toLowerCase();
@@ -74,6 +77,14 @@ export class Words {
   isStopword(word: string): boolean {
     return STOPWORDS.has(word);
   }
+
+  // A word safe to name a theme of the year with: an everyday word that is no
+  // private name and could not be a person's name either. Stricter than a
+  // quote, since it says what someone worked on; it may drop a word like "jack".
+  isTopicWord(word: string): boolean {
+    if (!this.isKnown(word) || this.isBlocked(word) || this.people.has(word)) return false;
+    return !baseForms(word).some((base) => this.people.has(base));
+  }
 }
 
 export function loadDictionary(path: string): Set<string> {
@@ -84,6 +95,16 @@ export function loadDictionary(path: string): Set<string> {
     if (line && line === line.toLowerCase()) words.add(line);
   }
   return words;
+}
+
+// The dictionary's capitalized entries (names of people and places), lowercased.
+export function loadNames(path: string): Set<string> {
+  if (!existsSync(path)) return new Set();
+  const names = new Set<string>();
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    if (line && line !== line.toLowerCase()) names.add(line.toLowerCase());
+  }
+  return names;
 }
 
 // Lowercase words, after removing code, links, paths and addresses.

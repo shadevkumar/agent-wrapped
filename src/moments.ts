@@ -1,6 +1,6 @@
 import { localDay } from "./files.ts";
 import { apiCost, PRICES_AS_OF, type Cost } from "./pricing.ts";
-import { usageTokens, type Agent, type Harvest, type Prompt } from "./types.ts";
+import { AGENTS, usageTokens, type Agent, type Harvest, type Prompt } from "./types.ts";
 import { findTypos, keySlips, tokenize, Words, type KeySlips, type TypoFamily } from "./words.ts";
 
 // The shareable result. Every string in here came through `Words.safeQuote`
@@ -41,7 +41,11 @@ export interface Wrapped {
     nicknames: { word: string; count: number }[]; // what you call your agent, most first
     checkIns: number; // prompts asking "okay?" or "right?"
   };
-  loyalty: { claudeShare: number; codexShare: number; bothAgentDays: number };
+  // Each agent's share of your prompts, and the days you used more than one.
+  loyalty: { claudeShare: number; codexShare: number; cursorShare: number; bothAgentDays: number };
+  // Stretches of the year, each with the everyday words that set it apart
+  // from the rest, most telling first. Months are "2026-03".
+  chapters: { from: string; to: string; prompts: number; words: string[] }[];
   // What the agents did. The logs keep this for less time than prompts.
   work: {
     since: string | null;
@@ -50,6 +54,11 @@ export interface Wrapped {
     edits: number;
     stops: number; // times you stopped an agent mid-answer
     languages: { name: string; edits: number }[];
+    pushes: number;
+    prs: number; // pull requests opened
+    deploys: number; // deploys and published packages
+    // The Monday-to-Sunday week with the most commits.
+    biggestWeek: { from: string; to: string; commits: number } | null;
   };
 }
 
@@ -109,7 +118,8 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
 
   const days = [...new Set(prompts.map((p) => localDay(p.at)))].sort();
   const cost = apiCost(h.usage, h.totals);
-  const agents = { claude: agentStats("claude", h), codex: agentStats("codex", h) };
+  const agents = Object.fromEntries(AGENTS.map((a) => [a, agentStats(a, h)])) as Record<Agent, AgentStats>;
+  const sum = (key: "sessions" | "agentHours" | "tokens") => AGENTS.reduce((s, a) => s + agents[a][key], 0);
 
   return {
     coverage: h.coverage.map((c) => ({
@@ -121,12 +131,12 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
     })),
     totals: {
       prompts: prompts.length,
-      sessions: agents.claude.sessions + agents.codex.sessions,
+      sessions: sum("sessions"),
       activeDays: days.length,
       firstDay: days[0] ?? null,
       lastDay: days.at(-1) ?? null,
-      agentHours: round(agents.claude.agentHours + agents.codex.agentHours, 1),
-      tokens: agents.claude.tokens + agents.codex.tokens,
+      agentHours: round(sum("agentHours"), 1),
+      tokens: sum("tokens"),
     },
     agents,
     cost: { ...cost, pricesAsOf: PRICES_AS_OF },
@@ -149,10 +159,68 @@ export function computeWrapped(h: Harvest, words = new Words(h.privateNames)): W
     loyalty: {
       claudeShare: share(agents.claude.prompts, prompts.length),
       codexShare: share(agents.codex.prompts, prompts.length),
+      cursorShare: share(agents.cursor.prompts, prompts.length),
       bothAgentDays: bothAgentDays(prompts),
     },
+    chapters: chapters(prompts, tokenized, words),
     work: work(h),
   };
+}
+
+const MAX_CHAPTERS = 5;
+// Words every kind of work uses; they say nothing about which work it was.
+const PLAIN = new Set(
+  ("also just like make sure check need want what when where which there here then them they this that with " +
+    "from have will would could should about into over after before than only even each other same more most " +
+    "some very really still again done next first please thanks okay right time thing things work working way " +
+    "good great well know think look looks show tell give take keep let lets used using use going doing").split(" "),
+);
+
+// Splits the active months into up to five stretches with similar amounts of
+// prompts, then finds the words each stretch uses far more than the others.
+function chapters(prompts: Prompt[], tokenized: string[][], words: Words): Wrapped["chapters"] {
+  const months = new Map<string, Set<string>[]>();
+  prompts.forEach((p, i) => {
+    const seen = new Set(tokenized[i]!.filter((w) => w.length >= 4 && !PLAIN.has(w) && words.isTopicWord(w)));
+    const month = localDay(p.at).slice(0, 7);
+    months.set(month, [...(months.get(month) ?? []), seen]);
+  });
+  // A month joins the stretch its middle prompt falls in, so stretches hold
+  // similar amounts of work and a quiet month never stands alone.
+  const target = prompts.length / MAX_CHAPTERS;
+  const groups: { months: string[]; prompts: Set<string>[] }[] = [];
+  let before = 0;
+  let lastIndex = -1;
+  for (const [month, list] of [...months].sort(([a], [b]) => a.localeCompare(b))) {
+    const index = Math.min(MAX_CHAPTERS - 1, Math.floor((before + list.length / 2) / target));
+    before += list.length;
+    if (index === lastIndex) {
+      groups.at(-1)!.months.push(month);
+      groups.at(-1)!.prompts.push(...list);
+    } else {
+      groups.push({ months: [month], prompts: [...list] });
+      lastIndex = index;
+    }
+  }
+  const total = new Map<string, number>();
+  const counts = groups.map((g) => {
+    const c = new Map<string, number>();
+    for (const seen of g.prompts) for (const w of seen) c.set(w, (c.get(w) ?? 0) + 1);
+    for (const [w, n] of c) total.set(w, (total.get(w) ?? 0) + n);
+    return c;
+  });
+  return groups
+    .map((g, i) => {
+      const rest = prompts.length - g.prompts.length;
+      const scored = [...counts[i]!]
+        .filter(([, n]) => n >= 5)
+        // How much more often this stretch uses the word than the rest of the year.
+        .map(([w, n]) => ({ w, s: n / g.prompts.length / ((total.get(w)! - n + 1) / (rest + 1)) }))
+        .filter((x) => x.s >= 2)
+        .sort((a, b) => b.s - a.s);
+      return { from: g.months[0]!, to: g.months.at(-1)!, prompts: g.prompts.length, words: scored.slice(0, 6).map((x) => x.w) };
+    })
+    .filter((c) => c.words.length >= 3);
 }
 
 function nicknames(tokenized: string[][]): { word: string; count: number }[] {
@@ -177,7 +245,25 @@ function work(h: Harvest): Wrapped["work"] {
     edits: count("edit"),
     stops: count("stop"),
     languages: [...byLanguage].map(([name, edits]) => ({ name, edits })).sort((a, b) => b.edits - a.edits),
+    pushes: count("push"),
+    prs: count("pr"),
+    deploys: count("deploy"),
+    biggestWeek: biggestWeek(h.actions.filter((a) => a.kind === "commit").map((a) => a.at)),
   };
+}
+
+function biggestWeek(commits: Date[]): Wrapped["work"]["biggestWeek"] {
+  const weeks = new Map<string, number>();
+  for (const at of commits) {
+    const monday = new Date(at.getFullYear(), at.getMonth(), at.getDate() - ((at.getDay() + 6) % 7), 12);
+    const key = localDay(monday);
+    weeks.set(key, (weeks.get(key) ?? 0) + 1);
+  }
+  const [from, n] = [...weeks].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] ?? [];
+  if (!from || !n) return null;
+  const sunday = new Date(`${from}T12:00:00`);
+  sunday.setDate(sunday.getDate() + 6);
+  return { from, to: localDay(sunday), commits: n };
 }
 
 function agentStats(agent: Agent, h: Harvest): AgentStats {
@@ -371,7 +457,7 @@ function bothAgentDays(prompts: Prompt[]): number {
     set.add(p.agent);
     byDay.set(day, set);
   }
-  return [...byDay.values()].filter((s) => s.size === 2).length;
+  return [...byDay.values()].filter((s) => s.size >= 2).length;
 }
 
 function share(part: number, whole: number): number {

@@ -18,6 +18,14 @@ interface Trait {
 }
 
 const n = (x: number) => Math.round(x).toLocaleString("en-US");
+
+// The two agents you used most, most first.
+function topTwo(w: Wrapped) {
+  const { claudeShare, codexShare, cursorShare } = w.loyalty;
+  return [{ name: "Claude", share: claudeShare }, { name: "Codex", share: codexShare }, { name: "Cursor", share: cursorShare }]
+    .sort((x, y) => y.share - x.share)
+    .slice(0, 2);
+}
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const perPrompt = (w: Wrapped, count: number) => (w.totals.prompts ? count / w.totals.prompts : 0);
 
@@ -68,8 +76,11 @@ const TRAITS: Trait[] = [
   {
     id: "two-timer",
     name: "The Two-Timer",
-    score: (w) => Math.min(w.loyalty.claudeShare, w.loyalty.codexShare) / 0.35,
-    line: (w) => `Claude and Codex both on ${n(w.loyalty.bothAgentDays)} days. Neither of them knows about the other.`,
+    score: (w) => (topTwo(w)[1]?.share ?? 0) / 0.35,
+    line: (w) => {
+      const [a, b] = topTwo(w);
+      return `${a!.name} and ${b!.name} both on ${n(w.loyalty.bothAgentDays)} days. Neither of them knows about the other.`;
+    },
   },
 ];
 

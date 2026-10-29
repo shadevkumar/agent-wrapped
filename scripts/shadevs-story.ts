@@ -1,7 +1,8 @@
 import type { StoryData } from "../src/story.ts";
 
 // Shadev's own story, made with the CLI on 2026-10-29. "Watch Shadev's story" on the
-// home page plays it, and the home page's keys type moments from it.
+// home page plays it, and the home page's keys type moments from it. Its
+// chapters stay out, like they do in any shared link by default.
 export const SHADEVS_STORY: StoryData = {
   "range": {
     "from": "2026-01-22",
@@ -33,21 +34,9 @@ export const SHADEVS_STORY: StoryData = {
       "eveyrthing",
       "deverything",
       "everythimg",
-      "everythinhg",
-      "everyuthing",
-      "evertything",
-      "evereything",
-      "everythihg",
-      "severything",
-      "everythng",
-      "everrything",
-      "evcerything",
-      "ecerything",
-      "evertyhing",
-      "everuything",
-      "everuthing",
-      "everytjing"
-    ]
+      "everythinhg"
+    ],
+    "ways": 30
   },
   "slip": {
     "meant": "h",
@@ -92,7 +81,7 @@ export const SHADEVS_STORY: StoryData = {
     "bothDays": 20
   },
   "money": {
-    "atLeastUsd": 13189.532846140008,
+    "atLeastUsd": 13190,
     "pricesAsOf": "2026-10-28"
   },
   "talk": {
@@ -114,6 +103,7 @@ export const SHADEVS_STORY: StoryData = {
       "TypeScript"
     ]
   },
+  "chapters": null,
   "personality": {
     "id": "fast-fingers",
     "name": "Fast Fingers",
@@ -126,5 +116,17 @@ export const SHADEVS_STORY: StoryData = {
   "letter": {
     "text": "We read “evrything” and “wnat” and understood you perfectly, which is either a skill or a cry for help. You called us “man” 549 times, and we liked it every time. You said please 862 times and thanks only 74, so we assume the rest was implied. You also stopped us mid-answer 408 times, usually right before the good part. Still, 671 hours together and 2314 test runs later, we would do it again. Keep typing fast. We will keep up.\n\nStill here, your agents",
     "by": "claude"
+  },
+  "period": "year",
+  "shipped": {
+    "since": "2026-06-01",
+    "pushes": 267,
+    "prs": 70,
+    "deploys": 39,
+    "biggestWeek": {
+      "from": "2026-10-19",
+      "to": "2026-10-25",
+      "commits": 109
+    }
   }
 };

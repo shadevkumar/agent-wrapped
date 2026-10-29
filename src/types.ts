@@ -2,7 +2,8 @@
 // raw prompt text and never leaves the process. Only `share.ts` output is safe
 // to show or export.
 
-export type Agent = "claude" | "codex";
+export type Agent = "claude" | "codex" | "cursor";
+export const AGENTS: Agent[] = ["claude", "codex", "cursor"];
 
 export interface Prompt {
   agent: Agent;
@@ -49,18 +50,24 @@ export interface Turn {
 export interface Action {
   agent: Agent;
   at: Date;
-  kind: "test" | "commit" | "edit" | "stop";
+  kind: CommandKind | "edit" | "stop";
   ext?: string; // ".py", for an edit
 }
 
-// Commands that run a project's tests, and ones that make a commit.
-const TEST_COMMAND = /\b(pytest|vitest|jest|mocha|go test|cargo test|npm (run )?test|pnpm (run )?test|yarn test|bun test|node --test|tests?\.sh|phpunit|rspec)\b/;
-const COMMIT_COMMAND = /\bgit commit\b/;
+// Commands that run a project's tests, make a commit, push it, open a pull
+// request, or put the work out: a deploy or a published package.
+const COMMANDS = {
+  test: /\b(pytest|vitest|jest|mocha|go test|cargo test|npm (run )?test|pnpm (run )?test|yarn test|bun test|node --test|tests?\.sh|phpunit|rspec)\b/,
+  commit: /\bgit commit\b/,
+  push: /\bgit push\b/,
+  pr: /\b(gh pr create|glab mr create)\b/,
+  deploy: /\b((npm|pnpm|yarn) publish|vercel (deploy )?--prod|netlify deploy|fly(ctl)? deploy|firebase deploy|wrangler (deploy|publish)|railway up|gcloud (run|app|functions) deploy|eas (submit|update)|cdk deploy|serverless deploy)\b/,
+};
+export type CommandKind = keyof typeof COMMANDS;
 
-export function commandKind(command: string): "test" | "commit" | null {
-  if (COMMIT_COMMAND.test(command)) return "commit";
-  if (TEST_COMMAND.test(command)) return "test";
-  return null;
+// Everything one command did: "git commit -m x && git push" is both.
+export function commandKinds(command: string): CommandKind[] {
+  return (Object.keys(COMMANDS) as CommandKind[]).filter((kind) => COMMANDS[kind].test(command));
 }
 
 // What each source covered, so the story can be honest about gaps.
@@ -85,6 +92,19 @@ export interface Harvest {
 
 export function emptyHarvest(): Harvest {
   return { prompts: [], usage: [], totals: [], turns: [], actions: [], coverage: [], privateNames: new Set() };
+}
+
+// Only what happened from `since` on. What each source covered is kept as read.
+export function harvestSince(h: Harvest, since: Date): Harvest {
+  const recent = <T extends { at: Date }>(list: T[]) => list.filter((x) => x.at >= since);
+  return {
+    ...h,
+    prompts: recent(h.prompts),
+    usage: recent(h.usage),
+    totals: recent(h.totals),
+    turns: recent(h.turns),
+    actions: recent(h.actions),
+  };
 }
 
 export function mergeHarvests(parts: Harvest[]): Harvest {

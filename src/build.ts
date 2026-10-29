@@ -47,6 +47,9 @@ if (!location.hash) {
 // separate files from /fonts/, so the page itself is small and phones show
 // it sooner, and the fonts stay cached between visits.
 export function buildHtml(data: StoryData | null, playerUrl = PLAYER_URL): string {
+  // link.js is a module of its own for the site build; on the page it runs inline.
+  const link = readFileSync(join(STORY_DIR, "link.js"), "utf8").replace(/^export /gm, "");
+  const script = `${link}\n${readFileSync(join(STORY_DIR, "story.js"), "utf8")}`;
   const font = (file: string) =>
     data ? `data:font/woff2;base64,${readFileSync(join(STORY_DIR, "fonts", file)).toString("base64")}` : `/fonts/${file}`;
   const fonts = [
@@ -70,5 +73,5 @@ export function buildHtml(data: StoryData | null, playerUrl = PLAYER_URL): strin
     .replace("/*FONTS*/", () => fonts)
     .replace("/*DATA*/", () => json)
     .replace("/*PLAYER_URL*/", () => JSON.stringify(playerUrl).replace(/</g, "\\u003c"))
-    .replace("/*SCRIPT*/", () => readFileSync(join(STORY_DIR, "story.js"), "utf8"));
+    .replace("/*SCRIPT*/", () => script);
 }

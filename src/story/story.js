@@ -3,7 +3,7 @@
 // what gets saved as an image or a video.
 //
 // The same page plays two kinds of story: your own, built into the file on
-// your computer, and one someone shared, packed into the link after "#v1.".
+// your computer, and one someone shared, packed into the link (see link.js).
 
 // ---------------------------------------------------------------- story data
 
@@ -38,6 +38,8 @@ if (SHARED) addEventListener("hashchange", () => location.reload());
 const D = OWN ?? (await openLink());
 if (!D) await new Promise(() => {}); // nothing to play; the page says why
 const YEAR = D.range?.to.slice(0, 4) ?? "";
+// "My 2026 with AI agents", or "My month" for a story of the last 30 days.
+const SPAN = D.period === "month" ? "month" : YEAR || "year";
 
 // The public page with no story in its link is the home page.
 async function openLink() {
@@ -48,7 +50,7 @@ async function openLink() {
     return null;
   }
   try {
-    const d = await unpack(location.hash.replace(/^#v1\./, ""));
+    const d = await readLink(location.hash);
     if (typeof d?.prompts === "number" && typeof d.personality?.name === "string") {
       document.getElementById("player").hidden = false;
       return d;
@@ -62,7 +64,7 @@ async function openLink() {
 // "Watch Shadev's story" link plays, so the two always match. Everything it
 // uses lives inside it: it runs before the rest of the script.
 async function typeMoments() {
-  const s = await unpack(document.getElementById("featured").hash.replace(/^#v1\./, ""));
+  const s = await readLink(document.getElementById("featured").hash);
   const n = (x) => x.toLocaleString("en-US");
   // The keys that differ from the right spelling stay lit.
   const wrong = (typed, word) => {
@@ -72,7 +74,7 @@ async function typeMoments() {
   // [what gets typed, which keys stay lit, what it is]
   const MOMENTS = [
     s.topTypo && [s.topTypo.spelling, wrong(s.topTypo.spelling, s.topTypo.word), `Shadev typed this ${n(s.topTypo.count)} times`],
-    s.spellings && [s.spellings.spellings[0], wrong(s.spellings.spellings[0], s.spellings.word), `one of Shadev's ${s.spellings.spellings.length} ways to spell ${s.spellings.word}`],
+    s.spellings && [s.spellings.spellings[0], wrong(s.spellings.spellings[0], s.spellings.word), `one of Shadev's ${s.spellings.ways ?? s.spellings.spellings.length + 1} ways to spell ${s.spellings.word}`],
     s.topPrompts[0] && [s.topPrompts[0].text, [], "Shadev's most-sent prompt"],
     s.catchphrase && [s.catchphrase.text, [], `Shadev said this in ${n(s.catchphrase.sessions)} sessions`],
     s.night && [s.night.latest, [], "Shadev's latest prompt of the year"],
@@ -112,6 +114,15 @@ async function typeMoments() {
     }
     await wait(450);
   }
+}
+
+// "#v2." links hold the story's values only (link.js). Links shared before
+// that, "#v1.", hold the whole story with its field names.
+async function readLink(hash) {
+  const [, version, body] = hash.match(/^#v([12])\.(.+)$/) ?? [];
+  if (!body) return null;
+  const json = await unpack(body);
+  return version === "2" ? fromLink(json) : json;
 }
 
 // JSON, compressed and written with link-safe characters.
@@ -168,6 +179,7 @@ const fade = (t, at, dur = 0.45) => (REDUCED ? 1 : easeOut((t - at) / dur));
 const num = (n) => Math.round(n).toLocaleString("en-US");
 const day = (iso) =>
   new Date(`${iso}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+const month = (ym) => new Date(`${ym}-15T12:00:00`).toLocaleDateString("en-US", { month: "short" });
 
 function font(size, { family = "Newsreader", weight = 400, style = "normal" } = {}) {
   return `${style} ${weight} ${size}px "${family}"`;
@@ -187,6 +199,7 @@ function text(ctx, b, str, y, o = {}) {
   ctx.textBaseline = "alphabetic";
   const x = o.align === "center" ? b.x + b.w / 2 : o.align === "right" ? b.x + b.w : b.x;
   const lines = wrap(ctx, str, b.w);
+  if (!o.measure) countWords(str);
   if (!o.measure) lines.forEach((l, i) => ctx.fillText(l, x, y + size + i * lh));
   ctx.restore();
   return y + size + (lines.length - 1) * lh + size * 0.45;
@@ -276,6 +289,7 @@ function cap(ctx, cx, cy, w, h, label, o) {
     const total = o.lines.reduce((sum, l) => sum + l.size, 0) + gap * (o.lines.length - 1);
     let y = midY - total / 2;
     for (const l of o.lines) {
+      countWords(l.text);
       ctx.font = font(l.size, l);
       ctx.globalAlpha = (o.alpha ?? 1) * (l.alpha ?? 1);
       ctx.textAlign = o.left ? "left" : "center";
@@ -285,6 +299,7 @@ function cap(ctx, cx, cy, w, h, label, o) {
     ctx.globalAlpha = o.alpha ?? 1;
   }
   if (o.right) {
+    countWords(o.right.text);
     ctx.font = font(o.right.size, o.right);
     ctx.textAlign = "right";
     ctx.fillText(o.right.text, w - pad, midY);
@@ -350,12 +365,20 @@ function background(ctx) {
 
 // ---------------------------------------------------------------- sound
 
-// Synthesised clacks and a chime: no audio files, nothing downloaded.
+// Synthesised keys, a chime and a lofi loop: no audio files, nothing downloaded.
+// Keys and the chime sit in a small room; the music runs quietly underneath.
+const LOFI = {
+  bpm: 72,
+  // One bar each, as MIDI notes: Fmaj7, Em7, Dm7, Cmaj7.
+  chords: [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]],
+  level: 0.17,
+};
+const hz = (note) => 440 * 2 ** ((note - 69) / 12);
+
 const Sound = {
   ctx: null,
   master: null,
   on: true,
-  noise: null,
   init() {
     if (this.ctx) return;
     try {
@@ -363,57 +386,189 @@ const Sound = {
     } catch {
       return;
     }
-    this.master = this.ctx.createGain();
+    const c = this.ctx;
+    this.master = c.createGain();
     this.master.gain.value = 0.55;
-    this.master.connect(this.ctx.destination);
-    const len = Math.floor(this.ctx.sampleRate * 0.05);
-    this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
-    const data = this.noise.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 4);
+    this.master.connect(c.destination);
+    this.click = noise(c, 0.05, (i, n) => Math.pow(1 - i / n, 4));
+    this.hiss = noise(c, 0.4, () => 1);
+    // A short, dark room: decaying noise as its echo.
+    this.room = c.createConvolver();
+    this.room.buffer = noise(c, 1.4, (i, n) => Math.pow(1 - i / n, 3), 2);
+    const wet = c.createGain();
+    wet.gain.value = 0.22;
+    this.room.connect(wet).connect(this.master);
+    this.fx = c.createGain();
+    this.fx.connect(this.master);
+    this.fx.connect(this.room);
+    this.startMusic();
   },
   key() {
     if (!this.on || !this.ctx) return;
     const c = this.ctx;
     const now = c.currentTime;
     const src = c.createBufferSource();
-    src.buffer = this.noise;
-    src.playbackRate.value = 0.8 + Math.random() * 0.5;
-    const band = c.createBiquadFilter();
-    band.type = "bandpass";
-    band.frequency.value = 1800 + Math.random() * 1400;
-    band.Q.value = 1.2;
-    const g = c.createGain();
-    g.gain.value = 0.9;
-    src.connect(band).connect(g).connect(this.master);
+    src.buffer = this.click;
+    src.playbackRate.value = 0.9 + Math.random() * 0.2;
+    const tone = c.createBiquadFilter();
+    tone.type = "lowpass";
+    tone.frequency.value = 2400 + Math.random() * 500;
+    const g = envelope(c, now, 0.42, 0.003, 0.06);
+    src.connect(tone).connect(g).connect(this.fx);
     src.start(now);
-    // The low "thock" of the key bottoming out.
+    // The soft "thock" of the key bottoming out.
     const osc = c.createOscillator();
-    const og = c.createGain();
-    osc.frequency.setValueAtTime(190 + Math.random() * 40, now);
-    osc.frequency.exponentialRampToValueAtTime(70, now + 0.05);
-    og.gain.setValueAtTime(0.35, now);
-    og.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-    osc.connect(og).connect(this.master);
+    osc.frequency.setValueAtTime(165 + Math.random() * 20, now);
+    osc.frequency.exponentialRampToValueAtTime(62, now + 0.07);
+    osc.connect(envelope(c, now, 0.2, 0.004, 0.09)).connect(this.fx);
     osc.start(now);
-    osc.stop(now + 0.08);
+    osc.stop(now + 0.12);
   },
   ding() {
     if (!this.on || !this.ctx) return;
     const c = this.ctx;
     const now = c.currentTime;
-    for (const [f, v] of [[880, 0.22], [1320, 0.12], [1760, 0.06]]) {
+    for (const [f, v] of [[880, 0.13], [1320, 0.055], [1760, 0.022]]) {
       const osc = c.createOscillator();
-      const g = c.createGain();
-      osc.type = "sine";
       osc.frequency.value = f;
-      g.gain.setValueAtTime(v, now);
-      g.gain.exponentialRampToValueAtTime(0.0005, now + 1.1);
-      osc.connect(g).connect(this.master);
+      osc.connect(envelope(c, now, v, 0.012, 1.4)).connect(this.fx);
       osc.start(now);
-      osc.stop(now + 1.2);
+      osc.stop(now + 1.5);
     }
   },
+  // The Sound button turns the music down with the rest.
+  setOn(on) {
+    this.on = on;
+    if (!this.music) return;
+    const now = this.ctx.currentTime;
+    this.music.gain.cancelScheduledValues(now);
+    this.music.gain.setTargetAtTime(on ? LOFI.level : 0, now, 0.4);
+  },
+  startMusic() {
+    const c = this.ctx;
+    this.music = c.createGain();
+    this.music.gain.value = 0;
+    const warm = c.createBiquadFilter();
+    warm.type = "lowpass";
+    warm.frequency.value = 1500;
+    this.music.connect(warm).connect(this.master);
+    // Tape wobble: the piano drifts a few cents, slowly.
+    const wobble = c.createOscillator();
+    wobble.frequency.value = 0.33;
+    this.wobble = c.createGain();
+    this.wobble.gain.value = 7;
+    wobble.connect(this.wobble);
+    wobble.start();
+    // Vinyl crackle, looped.
+    const crackle = c.createBufferSource();
+    crackle.buffer = noise(c, 3, () => (Math.random() < 0.0007 ? 14 : 0.06));
+    crackle.loop = true;
+    const dust = c.createGain();
+    dust.gain.value = 0.05;
+    crackle.connect(dust).connect(this.music);
+    crackle.start();
+    this.beat = 0;
+    this.nextBeat = c.currentTime + 0.2;
+    // Notes are queued a little ahead. While paused the clock stops, and so does the queue.
+    setInterval(() => this.queue(), 100);
+    this.music.gain.setTargetAtTime(this.on ? LOFI.level : 0, c.currentTime, 1.2);
+  },
+  queue() {
+    const c = this.ctx;
+    const beat = 60 / LOFI.bpm;
+    // A tab in the background runs this late; pick up from now, not in a burst.
+    if (this.nextBeat < c.currentTime) this.nextBeat = c.currentTime + 0.05;
+    while (this.nextBeat < c.currentTime + 0.4) {
+      const t = this.nextBeat;
+      this.nextBeat += beat;
+      this.beat++;
+      if (!this.on) continue; // keeps time, so the loop comes back in step
+      const b = (this.beat - 1) % 16;
+      const chord = LOFI.chords[Math.floor(b / 4)];
+      if (b % 4 === 0) chord.forEach((note, i) => this.piano(note, t + i * 0.014, beat * 4));
+      if (b % 2 === 0) {
+        this.bass(chord[0] - 12, t, beat * 1.8);
+        this.kick(t);
+      } else this.snare(t);
+      this.hat(t, 0.02);
+      this.hat(t + beat * 0.6, 0.012); // swung: late, and softer
+    }
+  },
+  piano(note, t, len) {
+    const c = this.ctx;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.1, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.03, t + 1.3);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + len);
+    g.connect(this.music);
+    for (const [type, detune, level] of [["sine", -4, 1], ["triangle", 5, 0.3]]) {
+      const o = c.createOscillator();
+      o.type = type;
+      o.frequency.value = hz(note);
+      o.detune.value = detune;
+      this.wobble.connect(o.detune);
+      o.onended = () => this.wobble.disconnect(o.detune);
+      const og = c.createGain();
+      og.gain.value = level;
+      o.connect(og).connect(g);
+      o.start(t);
+      o.stop(t + len + 0.05);
+    }
+  },
+  bass(note, t, len) {
+    const o = this.ctx.createOscillator();
+    o.frequency.value = hz(note);
+    o.connect(envelope(this.ctx, t, 0.16, 0.02, len)).connect(this.music);
+    o.start(t);
+    o.stop(t + len + 0.05);
+  },
+  kick(t) {
+    const o = this.ctx.createOscillator();
+    o.frequency.setValueAtTime(110, t);
+    o.frequency.exponentialRampToValueAtTime(45, t + 0.16);
+    o.connect(envelope(this.ctx, t, 0.32, 0.004, 0.3)).connect(this.music);
+    o.start(t);
+    o.stop(t + 0.35);
+  },
+  snare(t) {
+    this.noiseHit(t, "bandpass", 1700, 0.07, 0.17);
+  },
+  hat(t, level) {
+    this.noiseHit(t, "highpass", 7000, level, 0.04);
+  },
+  noiseHit(t, type, frequency, level, decay) {
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = this.hiss;
+    const f = c.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = frequency;
+    src.connect(f).connect(envelope(c, t, level, 0.002, decay)).connect(this.music);
+    src.start(t);
+    src.stop(t + decay + 0.05);
+  },
 };
+
+// A gain that rises to `peak` in `attack` seconds, then fades out by `end`.
+function envelope(c, t, peak, attack, end) {
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(peak, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0005, t + end);
+  return g;
+}
+
+// `seconds` of random noise, shaped by `shape(i, length)`.
+function noise(c, seconds, shape, channels = 1) {
+  const n = Math.floor(c.sampleRate * seconds);
+  const buffer = c.createBuffer(channels, n, c.sampleRate);
+  for (let ch = 0; ch < channels; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * shape(i, n);
+  }
+  return buffer;
+}
 
 // Fires sounds when playback crosses their moment, once per crossing.
 function effects(prev, t, live) {
@@ -429,16 +584,30 @@ const SILENT = { key() {}, ding() {} };
 
 // Every part is drawn as draw(ctx, t, fx, cw, b): `b` is its box ({ x, w }),
 // and it starts at y = 0. The layout moves it into place afterwards.
+// A card says when everything on it has appeared (`ready`), then stays long
+// enough to read every word it draws at a relaxed pace.
+const READING = 3.5; // words a second; some are read while the rest appear
+let counted = null; // while set, text() and cap() add up the words they draw
+function readTime(card) {
+  const c = document.createElement("canvas").getContext("2d");
+  counted = 0;
+  for (const part of [card.head, card.visual, card.words]) part?.(c, 1e6, SILENT, KEYS, shape.single);
+  const words = counted;
+  counted = null;
+  return card.ready + 1.5 + words / READING;
+}
+const countWords = (str) => counted !== null && (counted += String(str).split(/\s+/).filter(Boolean).length);
+
 function buildCards(D) {
   const cards = [];
-  const add = (card) => cards.push({ cw: KEYS, ...card });
+  const add = (card) => cards.push({ cw: KEYS, ...card, dur: card.dur ?? readTime(card) });
   const chars = (s) => [...s];
   const narrow = (l) => l === "," || l === ":" || l === ".";
   const big = (size) => ({ family: "Geist", weight: 600, size });
   const say = (size = 50) => ({ size, style: "italic" });
 
   add({
-    id: "intro", name: "Intro", dur: 6,
+    id: "intro", name: "Intro", ready: 2.6,
     alt: "Your agents have been talking about you.",
     visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, ["h", "e", "y"], 120, 210, t, 0.4, fx, cw, { step: 0.17 }),
     words(ctx, t, fx, cw, b) {
@@ -452,7 +621,7 @@ function buildCards(D) {
   });
 
   add({
-    id: "prompts", name: "Prompts", dur: 6.5,
+    id: "prompts", name: "Prompts", ready: 2.3,
     alt: `You sent your agents ${num(D.prompts)} prompts over ${num(D.activeDays)} days.`,
     head: (ctx, t, fx, cw, b) => text(ctx, b, "Prompts you sent us", 0, { ...say(54), color: cw.soft, alpha: fade(t, 0.2) }),
     visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(num(D.prompts)), 100, 168, t, 0.7, fx, cw, { narrow, step: 0.13 }),
@@ -462,10 +631,41 @@ function buildCards(D) {
       }),
   });
 
+  if (D.chapters) {
+    const list = D.chapters;
+    const months = (c) => (c.from === c.to ? month(c.from) : `${month(c.from)}–${month(c.to)}`);
+    const last = 0.6 + (list.length - 1) * 0.35;
+    add({
+      id: "chapters", name: "Chapters", ready: last + 1.3,
+      alt: `Your year in chapters: ${list.map((c) => `${months(c)}, ${c.name}`).join("; ")}.`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, "Your year in chapters", 0, { ...big(70), color: cw.ink }),
+      visual(ctx, t, fx, cw, b) {
+        // One text size for every row: the largest the longest name fits at.
+        const right = (c) => ({ text: months(c), size: 34, family: "Geist", weight: 400 });
+        const size = Math.min(
+          ...list.map((c) => {
+            const room = b.w - 100 - textWidth(ctx, right(c).text, 36, right(c));
+            return clamp((40 * room) / textWidth(ctx, c.name, 40, { family: "Geist", weight: 500 }), 26, 40);
+          }),
+        );
+        list.forEach((c, i) => {
+          const at = 0.6 + i * 0.35;
+          fx.key(at);
+          const local = REDUCED ? 9 : t - at;
+          if (local < 0) return;
+          const label = { text: c.name, size, family: "Geist", weight: 500 };
+          cap(ctx, b.x + b.w / 2, 70 + i * 160, b.w * easeOut(local / 0.5), 120, "", { ...cw, left: true, lines: [label], right: right(c), press: pressAt(local) });
+        });
+      },
+      words: (ctx, t, fx, cw, b) =>
+        text(ctx, b, "Named from a few words in each stretch, never your prompts.", 0, { size: 34, color: cw.faint, alpha: fade(t, last + 0.8) }),
+    });
+  }
+
   if (D.topTypo) {
     const tt = D.topTypo;
     add({
-      id: "top-typo", name: "Top typo", dur: 6.5,
+      id: "top-typo", name: "Top typo", ready: 2.7,
       alt: `You typed ${tt.spelling} ${num(tt.count)} times. We read it as ${tt.word}.`,
       visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(tt.spelling), 120, 220, t, 0.4, fx, cw, { step: 0.16 }),
       words(ctx, t, fx, cw, b) {
@@ -478,12 +678,13 @@ function buildCards(D) {
   if (D.spellings) {
     const sp = D.spellings;
     const list = sp.spellings.slice(0, 24);
+    const ways = sp.ways ?? sp.spellings.length + 1; // older links have every spelling
     const each = clamp(5 / list.length, 0.14, 0.4);
     const t0 = 0.6;
     const settle = t0 + list.length * each;
     add({
-      id: "spellings", name: "Spellings", dur: settle + 4,
-      alt: `There are ${sp.spellings.length + 1} ways to spell ${sp.word}. You used all of them.`,
+      id: "spellings", name: "Spellings", ready: settle + 1.5,
+      alt: `There are ${ways} ways to spell ${sp.word}. You used all of them.`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, `How you spell ${sp.word}`, 0, { ...big(70), color: cw.ink }),
       visual(ctx, t, fx, cw, b) {
         const i = REDUCED ? list.length : Math.floor((t - t0) / each);
@@ -506,7 +707,7 @@ function buildCards(D) {
       words(ctx, t, fx, cw, b) {
         // Drawn invisibly before it settles, so the layout keeps its place.
         const a = t >= settle || REDUCED ? 1 : 0;
-        const y = text(ctx, b, `${sp.spellings.length + 1} ways to spell it.`, 0, {
+        const y = text(ctx, b, `${ways} ways to spell it.`, 0, {
           ...big(72), color: cw.ink, alpha: a * fade(t, settle + 0.2),
         });
         text(ctx, b, "We know, because you used all of them.", y + 16, { ...say(), color: cw.soft, alpha: a * fade(t, settle + 1) });
@@ -519,7 +720,7 @@ function buildCards(D) {
     const rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"];
     const taps = [1.4, 1.75, 2.1, 2.45];
     add({
-      id: "slip", name: "Missed key", dur: 7,
+      id: "slip", name: "Missed key", ready: 3.3,
       alt: `You meant ${s.meant.toUpperCase()} and hit ${s.hit.toUpperCase()}, ${num(s.count)} times.`,
       head: (ctx, t, fx, cw, b) =>
         text(ctx, b, `You meant ${s.meant.toUpperCase()}.\nYou hit ${s.hit.toUpperCase()}.`, 0, { ...big(84), color: cw.ink }),
@@ -560,7 +761,7 @@ function buildCards(D) {
     const most = top[0].count;
     const last = 0.6 + (top.length - 1) * 0.35;
     add({
-      id: "top-prompts", name: "Favourite prompts", dur: 6.5,
+      id: "top-prompts", name: "Favourite prompts", ready: last + 1,
       alt: `Your favourite things to say to us: ${top.map((p) => `${p.text}, ${p.count} times`).join("; ")}.`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "Your favourite things to say to us", 0, { ...big(70), color: cw.ink }),
       visual(ctx, t, fx, cw, b) {
@@ -584,7 +785,7 @@ function buildCards(D) {
   if (D.catchphrase) {
     const c = D.catchphrase;
     add({
-      id: "catchphrase", name: "Catchphrase", dur: 6,
+      id: "catchphrase", name: "Catchphrase", ready: 2.1,
       alt: `Your catchphrase: ${c.text}. You said it in ${c.sessions} different sessions.`,
       head(ctx, t, fx, cw, b) {
         fx.ding(0.5);
@@ -608,7 +809,7 @@ function buildCards(D) {
       k.checkIns >= 20 && `And you asked “okay?” ${num(k.checkIns)} times.`,
     ].filter(Boolean);
     add({
-      id: "talk", name: "How you talk", dur: 7,
+      id: "talk", name: "How you talk", ready: 2.2 + (lines.length - 1) * 0.8,
       alt: `How you talk to us. ${lines.join(" ")}`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "How you talk to us", 0, { ...say(54), color: cw.soft }),
       visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(word), 120, 210, t, 0.4, fx, cw, { step: 0.16 }),
@@ -624,7 +825,7 @@ function buildCards(D) {
   if (D.night) {
     const n = D.night;
     add({
-      id: "night", name: "Late night", dur: 6.5,
+      id: "night", name: "Late night", ready: 2.3,
       alt: `Your latest prompt after midnight was at ${n.latest}. ${num(n.prompts)} prompts after midnight.`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "Your latest prompt after midnight", 0, { ...say(54), color: cw.soft }),
       visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(n.latest), 110, 190, t, 0.6, fx, cw, { narrow, step: 0.15 }),
@@ -639,7 +840,7 @@ function buildCards(D) {
     const step = clamp(2.4 / shown, 0.04, 0.12);
     const end = 0.4 + shown * step;
     add({
-      id: "streak", name: "Streak", dur: 4 + shown * step,
+      id: "streak", name: "Streak", ready: end + 1.2,
       alt: `${s.days} days in a row, ${day(s.from)} to ${day(s.to)}.`,
       visual(ctx, t, fx, cw, b) {
         const gap = 20;
@@ -667,11 +868,14 @@ function buildCards(D) {
 
   if (D.agents) {
     const a = D.agents;
-    const parts = [["Codex", a.codex], ["Claude", a.claude]].filter(([, v]) => v > 0);
+    const parts = [["Codex", a.codex], ["Claude", a.claude], ["Cursor", a.cursor ?? 0]].filter(([, v]) => v > 0);
+    const split = ["", "", ", split between two of us", ", split between three of us"][parts.length];
+    // Cursor doesn't log how long it worked, so a Cursor-only year has no hours.
+    const title = a.hours >= 1 ? `${num(a.hours)} hours of work${split}.` : `Your prompts${split || ", all to one of us"}.`;
     add({
-      id: "agents", name: "Your agents", dur: 6.5,
-      alt: `${num(a.hours)} hours of agent work. Codex ${Math.round(a.codex * 100)} percent, Claude ${Math.round(a.claude * 100)} percent.`,
-      head: (ctx, t, fx, cw, b) => text(ctx, b, `${num(a.hours)} hours of work, split between two of us.`, 0, { ...big(72), color: cw.ink }),
+      id: "agents", name: "Your agents", ready: 2.5,
+      alt: `${num(a.hours)} hours of agent work. ${parts.map(([name, share]) => `${name} ${Math.round(share * 100)} percent`).join(", ")}.`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, title, 0, { ...big(72), color: cw.ink }),
       visual(ctx, t, fx, cw, b) {
         parts.forEach(([name, share], i) => {
           const at = 0.7 + i * 0.4;
@@ -686,7 +890,7 @@ function buildCards(D) {
       },
       words: (ctx, t, fx, cw, b) =>
         a.bothDays > 0 &&
-        text(ctx, b, `Some days you needed both of us. ${num(a.bothDays)} of them, to be exact.`, 0, {
+        text(ctx, b, `Some days you needed ${parts.length > 2 ? "more than one" : "both"} of us. ${num(a.bothDays)} of them, to be exact.`, 0, {
           ...say(), color: cw.soft, alpha: fade(t, 2),
         }),
     });
@@ -698,7 +902,7 @@ function buildCards(D) {
     const most = Math.max(...rows.map(([, n]) => n));
     const last = 0.6 + (rows.length - 1) * 0.35;
     add({
-      id: "work", name: "What we did", dur: 7,
+      id: "work", name: "What we did", ready: last + 1.7,
       alt: `What we got done, since ${day(w.since)}: ${rows.map(([what, n]) => `${what}, ${num(n)} times`).join("; ")}.${w.languages.length ? ` Mostly in ${w.languages.join(" and ")}.` : ""}`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "What we got done", 0, { ...big(70), color: cw.ink }),
       visual(ctx, t, fx, cw, b) {
@@ -725,10 +929,58 @@ function buildCards(D) {
     });
   }
 
+  if (D.shipped) {
+    const s = D.shipped;
+    const tiles = [[s.pushes, s.pushes === 1 ? "push" : "pushes"], [s.prs, s.prs === 1 ? "pull request" : "pull requests"], [s.deploys, s.deploys === 1 ? "deploy" : "deploys"]]
+      .filter(([n]) => n > 0);
+    const week = s.biggestWeek;
+    const last = 0.6 + (tiles.length - 1) * 0.3;
+    add({
+      id: "shipped", name: "What you shipped", ready: last + (week ? 2 : 1.2),
+      alt: `What you shipped: ${tiles.map(([n, what]) => `${num(n)} ${what}`).join(", ")}.${week ? ` Your biggest week was ${day(week.from)} to ${day(week.to)}, with ${num(week.commits)} commits.` : ""}`,
+      head: (ctx, t, fx, cw, b) => text(ctx, b, "What you shipped", 0, { ...big(70), color: cw.ink }),
+      visual(ctx, t, fx, cw, b) {
+        const gap = 24;
+        const tw = (b.w - gap * (tiles.length - 1)) / tiles.length;
+        const valueFont = { family: "Geist", weight: 600 };
+        // Every tile gets as many label lines as the longest, so the numbers line up.
+        ctx.save();
+        ctx.font = font(32, { family: "Geist" });
+        const labels = tiles.map(([, what]) => wrap(ctx, what, tw - 70));
+        ctx.restore();
+        const rows = Math.max(...labels.map((l) => l.length));
+        for (const l of labels) while (l.length < rows) l.push(" ");
+        tiles.forEach(([n], i) => {
+          const at = 0.6 + i * 0.3;
+          fx.key(at);
+          const local = REDUCED ? 9 : t - at;
+          if (local < 0) return;
+          const value = num(n);
+          const size = Math.min(76, (76 * (tw - 70)) / textWidth(ctx, value, 76, valueFont));
+          const label = labels[i];
+          cap(ctx, b.x + i * (tw + gap) + tw / 2, 130, tw, 260, "", {
+            ...cw,
+            left: true,
+            pad: 35,
+            lines: [{ text: value, size, ...valueFont }, ...label.map((l) => ({ text: l, size: 32, family: "Geist", alpha: 0.6 }))],
+            scale: 0.85 + 0.15 * easeBack(local / 0.25),
+            press: pressAt(local),
+          });
+        });
+      },
+      words(ctx, t, fx, cw, b) {
+        const y = week
+          ? text(ctx, b, `Your biggest week: ${day(week.from)} to ${day(week.to)}, with ${num(week.commits)} commits.`, 0, { ...say(), color: cw.soft, alpha: fade(t, last + 0.6) }) + 20
+          : 0;
+        text(ctx, b, `From the commands your agents ran, since ${day(s.since)}.`, y, { size: 34, color: cw.faint, alpha: fade(t, last + (week ? 1.4 : 0.6)) });
+      },
+    });
+  }
+
   if (D.money) {
     const m = D.money;
     add({
-      id: "money", name: "API value", dur: 7,
+      id: "money", name: "API value", ready: 3.1,
       alt: `At least ${num(m.atLeastUsd)} US dollars of agent work at public API prices.`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "Our work, at public API prices", 0, { ...say(54), color: cw.soft }),
       visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, chars(`$${num(m.atLeastUsd)}`), 100, 150, t, 0.6, fx, cw, { narrow, step: 0.12 }),
@@ -746,7 +998,7 @@ function buildCards(D) {
   const p = D.personality;
   const reveal = 2.2;
   add({
-    id: "personality", name: "Personality", dur: 8,
+    id: "personality", name: "Personality", ready: reveal + 2.1,
     alt: `You are ${p.name}. ${p.line}`,
     head: (ctx, t, fx, cw, b) => text(ctx, b, "So, who are you?", 0, { ...say(54), color: cw.soft }),
     visual(ctx, t, fx, cw, b) {
@@ -773,8 +1025,9 @@ function buildCards(D) {
   });
 
   const letterWords = D.letter?.text.split(/\s+/).length;
+  const perWord = 1 / (READING + 0.6); // it writes a little faster than you read, then waits for you
   if (D.letter) add({
-    id: "letter", name: "Letter", dur: Math.max(10, letterWords * 0.28 + 3),
+    id: "letter", name: "Letter", dur: 0.6 + letterWords * perWord + 3.5,
     alt: `A note from your agents: ${D.letter.text}`,
     head: (ctx, t, fx, cw, b) => text(ctx, b, "A note from your agents", 0, { family: "Geist", weight: 600, size: 60, color: cw.ink }),
     words(ctx, t, fx, cw, b) {
@@ -792,7 +1045,7 @@ function buildCards(D) {
       ctx.stroke();
       ctx.restore();
       // Words appear at reading pace.
-      const shown = REDUCED ? letterWords : Math.floor(clamp((t - 0.6) / 0.22, 0, letterWords));
+      const shown = REDUCED ? letterWords : Math.floor(clamp((t - 0.6) / perWord, 0, letterWords));
       let n = 0;
       const visible = D.letter.text
         .split(/(\s+)/)
@@ -809,10 +1062,10 @@ function buildCards(D) {
     D.night ? [D.night.latest, "latest prompt after midnight"] : D.streak ? [`${D.streak.days} days`, "longest streak"] : null,
   ].filter(Boolean);
   add({
-    id: "summary", name: "Summary", dur: 8,
+    id: "summary", name: "Summary", ready: 0.7 + tiles.length * 0.25,
     alt: `Summary: ${p.name}. ${num(D.prompts)} prompts.`,
     head(ctx, t, fx, cw, b) {
-      const y = text(ctx, b, `My ${YEAR || "year"} with AI agents`, 0, { ...say(), color: cw.soft });
+      const y = text(ctx, b, `My ${SPAN} with AI agents`, 0, { ...say(), color: cw.soft });
       text(ctx, b, p.name, y + 10, { family: "Geist", weight: 700, size: 92, color: cw.ink, lh: 1.05 });
     },
     visual(ctx, t, fx, cw, b) {
@@ -944,9 +1197,37 @@ function fitShape() {
   frame.dataset.shape = shape === SHAPES.wide ? "wide" : "tall";
 }
 
-const state = { index: 0, started: 0, playing: false, holdPaused: false, pausedAt: 0, prevT: 0, mode: "player" };
+const state = { index: 0, started: 0, playing: false, paused: false, holding: false, pausedAt: 0, prevT: 0, mode: "player" };
+
+// Pausing stops the card's clock and its sound where they are.
+const pauseBtn = document.getElementById("pause");
+function pause() {
+  if (!state.playing || state.paused) return;
+  state.paused = true;
+  state.pausedAt = performance.now();
+  Sound.ctx?.suspend();
+  renderPause();
+}
+function resume() {
+  if (!state.paused) return;
+  state.started += performance.now() - state.pausedAt;
+  state.paused = false;
+  Sound.ctx?.resume();
+  renderPause();
+}
+function renderPause() {
+  pauseBtn.setAttribute("aria-pressed", String(state.paused));
+  pauseBtn.setAttribute("aria-label", state.paused ? "Play" : "Pause");
+  wake();
+}
 
 function show(index) {
+  // Moving to another card plays it.
+  if (state.paused) {
+    state.paused = false;
+    Sound.ctx?.resume();
+    renderPause();
+  }
   state.index = clamp(index, 0, cards.length - 1);
   state.started = performance.now();
   state.prevT = -1;
@@ -954,7 +1235,7 @@ function show(index) {
 }
 
 function elapsed(now) {
-  return ((state.holdPaused ? state.pausedAt : now) - state.started) / 1000;
+  return ((state.paused ? state.pausedAt : now) - state.started) / 1000;
 }
 
 function tick(now) {
@@ -962,12 +1243,12 @@ function tick(now) {
     const card = cards[state.index];
     // Before play, the first card shows finished behind the start button.
     const t = state.playing ? elapsed(now) : card.dur;
-    paint(stage, card, t, effects(state.prevT, t, state.playing && !state.holdPaused));
+    paint(stage, card, t, effects(state.prevT, t, state.playing && !state.paused));
     state.prevT = t;
     [...bars.children].forEach((bar, i) => {
       bar.firstChild.style.width = `${i < state.index ? 100 : i > state.index ? 0 : clamp(t / card.dur) * 100}%`;
     });
-    if (state.playing && !state.holdPaused && t >= card.dur) {
+    if (state.playing && !state.paused && t >= card.dur) {
       if (state.index === cards.length - 1) openShare();
       else show(state.index + 1);
     }
@@ -986,21 +1267,21 @@ document.getElementById("play").addEventListener("click", () => {
   show(0);
 });
 
-// Tap right side: next. Tap left: back. Press and hold: pause.
+// Tap right side: next. Tap left: back. Press and hold: pause until you let go.
 let holdTimer = 0;
 stage.addEventListener("pointerdown", () => {
-  if (!state.playing) return;
+  if (!state.playing || state.paused) return;
   holdTimer = setTimeout(() => {
-    state.holdPaused = true;
-    state.pausedAt = performance.now();
+    state.holding = true;
+    pause();
   }, 220);
 });
 stage.addEventListener("pointerup", (e) => {
   if (!state.playing) return;
   clearTimeout(holdTimer);
-  if (state.holdPaused) {
-    state.started += performance.now() - state.pausedAt;
-    state.holdPaused = false;
+  if (state.holding) {
+    state.holding = false;
+    resume();
     return;
   }
   const rect = stage.getBoundingClientRect();
@@ -1014,8 +1295,11 @@ addEventListener("keydown", (e) => {
     return;
   }
   if (!state.playing) return;
-  if (e.key === "ArrowRight" || e.key === " ") {
+  if (e.key === " ") {
     e.preventDefault();
+    if (state.paused) resume();
+    else pause();
+  } else if (e.key === "ArrowRight") {
     if (state.index === cards.length - 1) openShare();
     else show(state.index + 1);
   } else if (e.key === "ArrowLeft") show(state.index - 1);
@@ -1032,17 +1316,20 @@ const renderSoundBtn = () => {
 };
 renderSoundBtn();
 soundBtn.addEventListener("click", () => {
-  Sound.on = !Sound.on;
+  Sound.setOn(!Sound.on);
   try {
     localStorage.setItem("agent-wrapped-sound", Sound.on ? "on" : "off");
   } catch {}
   renderSoundBtn();
 });
+pauseBtn.addEventListener("click", () => (state.paused ? resume() : pause()));
+// Leaving the tab pauses the story, so you come back to where you were.
+document.addEventListener("visibilitychange", () => document.hidden && state.mode === "player" && pause());
 document.getElementById("skip").addEventListener("click", openShare);
 document.getElementById("save-now").addEventListener("click", saveCurrent);
 if (SHARED) {
   document.getElementById("play").textContent = "Play the story";
-  document.getElementById("start-note").textContent = "A year with AI coding agents, wrapped. Sound on for the full effect.";
+  document.getElementById("start-note").textContent = `A ${D.period === "month" ? "month" : "year"} with AI coding agents, wrapped. Sound on for the full effect.`;
   document.getElementById("skip").textContent = "Skip to the end";
 }
 
@@ -1052,7 +1339,8 @@ let idleTimer = 0;
 function wake() {
   player.classList.remove("idle");
   clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => state.playing && state.mode === "player" && player.classList.add("idle"), 2200);
+  // While paused the buttons stay, so Play is always in reach.
+  idleTimer = setTimeout(() => state.playing && !state.paused && state.mode === "player" && player.classList.add("idle"), 2200);
 }
 for (const ev of ["pointermove", "pointerdown", "keydown"]) addEventListener(ev, wake);
 
@@ -1073,10 +1361,12 @@ const postLinkedIn = document.getElementById("post-linkedin");
 
 // Cards you can leave out, and the part of the story each one needs.
 const LEAVABLE = {
-  "top-typo": "topTypo", spellings: "spellings", slip: "slip", "top-prompts": "topPrompts", catchphrase: "catchphrase",
-  talk: "talk", night: "night", streak: "streak", agents: "agents", work: "work", money: "money", letter: "letter",
+  chapters: "chapters", "top-typo": "topTypo", spellings: "spellings", slip: "slip", "top-prompts": "topPrompts", catchphrase: "catchphrase",
+  talk: "talk", night: "night", streak: "streak", agents: "agents", work: "work", shipped: "shipped", money: "money", letter: "letter",
 };
-const left = new Set(); // ids of the cards left out
+// ids of the cards left out. Chapters say what you worked on, so they stay
+// out of a link unless you add them.
+const left = new Set(["chapters"]);
 let link = "";
 let linkFor = 0; // ignores a slower, older link if the choice changed meanwhile
 
@@ -1087,7 +1377,7 @@ function sharedData() {
   return d;
 }
 
-const shareText = (d) => `My ${YEAR || "year"} with AI coding agents, wrapped. I'm ${d.personality.name}.`;
+const shareText = (d) => `My ${SPAN} with AI coding agents, wrapped. I'm ${d.personality.name}.`;
 
 function finalFrame(card, s) {
   return withShape(s, () => {
@@ -1123,7 +1413,7 @@ async function renderShare() {
   const data = sharedData();
   preview.src = finalFrame(summaryCard(), shape).toDataURL("image/png");
   preview.dataset.shape = shapeName(shape);
-  const next = PLAYER_URL ? `${PLAYER_URL}#v1.${await pack(data)}` : "";
+  const next = PLAYER_URL ? `${PLAYER_URL}#v2.${await pack(toLink(data))}` : "";
   if (mine !== linkFor) return;
   link = next;
   const url = encodeURIComponent(link);
@@ -1158,6 +1448,7 @@ function renderChoices() {
 
 // Your own story ends on sharing; a shared one ends on how to make your own.
 function openShare() {
+  resume();
   state.mode = "share";
   clearTimeout(idleTimer);
   player.hidden = true;

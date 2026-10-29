@@ -2,7 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { coverage, lastJsonLine, namesFromGitUrl, namesFromPath, toDate } from "../files.ts";
-import { commandKind, emptyHarvest, type Harvest } from "../types.ts";
+import { commandKinds, emptyHarvest, type Harvest } from "../types.ts";
 
 // Codex keeps, in ~/.codex:
 // - state_N.sqlite `threads`: one row per thread, with its token total
@@ -95,8 +95,7 @@ export function harvestCodex(home: string): Harvest {
           const path = firstString(item.head, "path");
           if (path) h.actions.push({ agent: "codex", at, kind: "edit", ext: extname(path).toLowerCase() });
         } else {
-          const kind = commandKind(firstString(item.head, "command") ?? "");
-          if (kind) h.actions.push({ agent: "codex", at, kind });
+          for (const kind of commandKinds(firstString(item.head, "command") ?? "")) h.actions.push({ agent: "codex", at, kind });
         }
       }
     } catch {

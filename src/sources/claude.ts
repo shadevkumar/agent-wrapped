@@ -1,6 +1,6 @@
 import { extname, join } from "node:path";
 import { coverage, findFiles, localDay, namesFromPath, readJson, readJsonl, toDate } from "../files.ts";
-import { type Action, commandKind, emptyHarvest, type Harvest, type Usage } from "../types.ts";
+import { type Action, commandKinds, emptyHarvest, type Harvest, type Usage } from "../types.ts";
 
 // Claude Code keeps three things in ~/.claude:
 // - history.jsonl: every prompt typed, kept long term
@@ -113,8 +113,7 @@ function actionsIn(row: any): [string, Pick<Action, "kind" | "ext">][] {
     if (b?.type !== "tool_use" || typeof b.id !== "string") continue;
     const path = b.input?.file_path ?? b.input?.notebook_path;
     if (EDIT_TOOLS.has(b.name) && typeof path === "string") out.push([b.id, { kind: "edit", ext: extname(path).toLowerCase() }]);
-    const kind = b.name === "Bash" ? commandKind(String(b.input?.command ?? "")) : null;
-    if (kind) out.push([b.id, { kind }]);
+    if (b.name === "Bash") for (const kind of commandKinds(String(b.input?.command ?? ""))) out.push([`${b.id}|${kind}`, { kind }]);
   }
   return out;
 }

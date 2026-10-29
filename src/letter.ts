@@ -1,5 +1,4 @@
-import { spawnSync } from "node:child_process";
-import { tmpdir } from "node:os";
+import { askClaude } from "./claude-cli.ts";
 import type { Wrapped } from "./moments.ts";
 import type { Personality } from "./personality.ts";
 
@@ -7,12 +6,15 @@ import type { Personality } from "./personality.ts";
 // sees the already-safe facts below, never prompts or logs. Without Claude,
 // or if it fails, a template letter is used instead.
 
+// What the story covers: the year so far, or only the last 30 days.
+export type Span = "year" | "month";
+
 export interface Letter {
   text: string;
   by: "claude" | "template";
 }
 
-const SYSTEM = `You write the closing card of "Agent Wrapped", a year-in-review of someone's work with AI coding agents.
+const SYSTEM = `You write the closing card of "Agent Wrapped", a look back at someone's work with AI coding agents.
 Write a short letter from their agents to them. Rules:
 - 70 to 100 words, plain text, no markdown, no emoji, no greeting line like "Dear".
 - Warm, funny, a little roasting, never mean. Sound like a coworker, not a greeting card.
@@ -20,8 +22,9 @@ Write a short letter from their agents to them. Rules:
 - Never invent numbers, names, projects or events that are not in the facts.
 - End with a short sign-off line from "your agents".`;
 
-export function factsFor(w: Wrapped, p: Personality): string {
+export function factsFor(w: Wrapped, p: Personality, span: Span = "year"): string {
   const facts = [
+    span === "month" ? "This story covers only their last 30 days." : "This story covers their year so far.",
     `Their personality: ${p.name}. ${p.line}`,
     `${w.totals.prompts} prompts over ${w.totals.activeDays} days; their agents worked ${Math.round(w.totals.agentHours)} hours.`,
     w.rhythm.lateNight.latest ? `Latest prompt after midnight: ${w.rhythm.lateNight.latest}.` : "",
@@ -37,23 +40,8 @@ export function factsFor(w: Wrapped, p: Personality): string {
   return facts.filter(Boolean).join("\n");
 }
 
-export function writeLetter(w: Wrapped, p: Personality): Letter {
-  const run = spawnSync(
-    "claude",
-    [
-      "-p",
-      "--model", "sonnet",
-      "--tools", "",
-      "--strict-mcp-config",
-      "--disable-slash-commands",
-      "--no-session-persistence",
-      "--setting-sources", "",
-      "--system-prompt", SYSTEM,
-    ],
-    // Run outside any project so no project instructions are loaded.
-    { cwd: tmpdir(), input: `Facts:\n${factsFor(w, p)}`, encoding: "utf8", timeout: 90_000 },
-  );
-  const text = cleanLetter(run.status === 0 ? run.stdout : "");
+export async function writeLetter(w: Wrapped, p: Personality, span: Span = "year"): Promise<Letter> {
+  const text = cleanLetter((await askClaude(SYSTEM, `Facts:\n${factsFor(w, p, span)}`, 90_000)) ?? "");
   return text ? { text, by: "claude" } : { text: templateLetter(w, p), by: "template" };
 }
 
