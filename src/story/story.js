@@ -7,12 +7,7 @@
 
 // ---------------------------------------------------------------- story data
 
-const PLAYER_URL = JSON.parse(document.getElementById("player-url").textContent);
-const OWN = JSON.parse(document.getElementById("data").textContent);
-const SHARED = !OWN;
-const D = OWN ?? (await openLink());
-if (!D) await new Promise(() => {}); // nothing to play; the page says why
-const YEAR = D.range?.to.slice(0, 4) ?? "";
+const COMMAND = "npx @shadevkumar/agent-wrapped";
 
 const toast = document.getElementById("toast");
 let toastTimer = 0;
@@ -23,21 +18,33 @@ function notify(message, { stay = false } = {}) {
   if (!stay) toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
 }
 
-// Wired first: the home page has no story, so the script stops early there.
+// Everything the home page needs is set up above the line where the script
+// stops for a link with no story in it.
 for (const btn of document.querySelectorAll("[data-copy-command]")) btn.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText("npx @shadevkumar/agent-wrapped");
-    notify("Copied. Paste it into your terminal.");
+    await navigator.clipboard.writeText(COMMAND);
+    btn.textContent = "Copied";
+    setTimeout(() => (btn.textContent = "Copy"), 1800);
   } catch {
-    notify("Couldn't copy it. Type npx @shadevkumar/agent-wrapped in your terminal.");
+    notify(`Couldn't copy it. Type ${COMMAND} in your terminal.`);
   }
 });
+
+const PLAYER_URL = JSON.parse(document.getElementById("player-url").textContent);
+const OWN = JSON.parse(document.getElementById("data").textContent);
+const SHARED = !OWN;
+// A new link in the same tab, like "Watch Shadev's story", starts over.
+if (SHARED) addEventListener("hashchange", () => location.reload());
+const D = OWN ?? (await openLink());
+if (!D) await new Promise(() => {}); // nothing to play; the page says why
+const YEAR = D.range?.to.slice(0, 4) ?? "";
 
 // The public page with no story in its link is the home page.
 async function openLink() {
   document.getElementById("player").hidden = true;
   if (!location.hash) {
     document.getElementById("home").hidden = false;
+    typeMoments();
     return null;
   }
   try {
@@ -49,6 +56,62 @@ async function openLink() {
   } catch {}
   document.getElementById("missing").hidden = false;
   return null;
+}
+
+// The home page's keys type moments from Shadev's story, the one its
+// "Watch Shadev's story" link plays, so the two always match. Everything it
+// uses lives inside it: it runs before the rest of the script.
+async function typeMoments() {
+  const s = await unpack(document.getElementById("featured").hash.replace(/^#v1\./, ""));
+  const n = (x) => x.toLocaleString("en-US");
+  // The keys that differ from the right spelling stay lit.
+  const wrong = (typed, word) => {
+    const at = [...typed].flatMap((ch, i) => (ch === word[i] ? [] : [i]));
+    return typed.length === word.length ? at : at.slice(0, 1);
+  };
+  // [what gets typed, which keys stay lit, what it is]
+  const MOMENTS = [
+    s.topTypo && [s.topTypo.spelling, wrong(s.topTypo.spelling, s.topTypo.word), `Shadev typed this ${n(s.topTypo.count)} times`],
+    s.spellings && [s.spellings.spellings[0], wrong(s.spellings.spellings[0], s.spellings.word), `one of Shadev's ${s.spellings.spellings.length} ways to spell ${s.spellings.word}`],
+    s.topPrompts[0] && [s.topPrompts[0].text, [], "Shadev's most-sent prompt"],
+    s.catchphrase && [s.catchphrase.text, [], `Shadev said this in ${n(s.catchphrase.sessions)} sessions`],
+    s.night && [s.night.latest, [], "Shadev's latest prompt of the year"],
+  ].filter((m) => m && m[0].length <= 10);
+  const row = document.getElementById("home-keys");
+  const note = document.getElementById("home-note");
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const key = (ch) => {
+    const k = document.createElement("span");
+    k.className = ch === " " ? "key space" : "key";
+    k.textContent = ch;
+    return k;
+  };
+  const show = ([word, lit, what]) => {
+    row.replaceChildren(...[...word].map(key));
+    for (const i of lit) row.children[i].classList.add("lit");
+    note.textContent = what;
+  };
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return show(MOMENTS[0]);
+  for (let m = 0; ; m = (m + 1) % MOMENTS.length) {
+    const [word, lit, what] = MOMENTS[m];
+    for (const [i, ch] of [...word].entries()) {
+      const k = row.appendChild(key(ch));
+      k.classList.add("down");
+      await wait(70);
+      k.classList.remove("down");
+      if (lit.includes(i)) k.classList.add("lit");
+      await wait(60 + Math.random() * 90);
+    }
+    note.textContent = what;
+    note.classList.add("show");
+    await wait(2600);
+    note.classList.remove("show");
+    while (row.lastChild) {
+      row.lastChild.remove();
+      await wait(38);
+    }
+    await wait(450);
+  }
 }
 
 // JSON, compressed and written with link-safe characters.
@@ -269,7 +332,7 @@ function initials(name) {
 }
 
 function watermark(ctx, cw) {
-  text(ctx, { x: 0, w: shape.W }, "made with npx @shadevkumar/agent-wrapped", shape.H - (shape === SHAPES.wide ? 84 : 124), {
+  text(ctx, { x: 0, w: shape.W }, `made with ${COMMAND}`, shape.H - (shape === SHAPES.wide ? 84 : 124), {
     family: "Geist", weight: 500, size: 26, color: cw.faint, align: "center",
   });
 }

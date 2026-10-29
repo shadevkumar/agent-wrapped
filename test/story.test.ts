@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { buildHtml } from "../src/build.ts";
 import { templateLetter, writeLetter } from "../src/letter.ts";
@@ -75,6 +76,14 @@ test("the public player page carries no story, only where shared stories play", 
   const data = html.slice(html.indexOf('id="data">') + 10, html.indexOf("</script>", html.indexOf('id="data">')));
   assert.equal(data, "null");
   assert.ok(html.includes('"https://example.com/\\u003c/script>"'));
+});
+
+test("the home page's Copy button is set up before the script stops for a link with no story", () => {
+  const script = readFileSync(new URL("../src/story/story.js", import.meta.url), "utf8");
+  const stop = script.indexOf("await new Promise(() => {})");
+  assert.ok(stop > 0);
+  assert.ok(script.indexOf("[data-copy-command]") < stop);
+  assert.ok(script.indexOf("function notify") < stop);
 });
 
 test("the finished page holds no private detail from the logs", () => {
