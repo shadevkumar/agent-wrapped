@@ -19,6 +19,7 @@ const PUBLIC_HEAD = `<meta name="description" content="A year with AI coding age
 <meta property="og:url" content="${PLAYER_URL}">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="preload" href="/fonts/geist-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/newsreader-italic.woff2" as="font" type="font/woff2" crossorigin>
 <script>
