@@ -954,13 +954,14 @@ function buildCards(D) {
   const plain = (l) => l === "," || l === ":" || l === "." || l === " AM";
   const big = (size) => ({ family: "Geist", weight: 600, size });
   const say = (size = 50) => ({ size, style: "italic" });
+  const opening = D.name ? `${D.name}, your agents have been talking about you.` : "Your agents have been talking about you.";
 
   add({
     id: "intro", name: "Intro", ready: 2.6,
-    alt: "Your agents have been talking about you.",
+    alt: opening,
     visual: (ctx, t, fx, cw, b) => typeRow(ctx, b, ["h", "e", "y"], 120, 210, t, 0.4, fx, cw, { step: 0.17 }),
     words(ctx, t, fx, cw, b) {
-      const y = text(ctx, b, "Your agents have been talking about you.", 0, { ...big(78), color: cw.ink, alpha: fade(t, 1.3) });
+      const y = text(ctx, b, opening, 0, { ...big(78), color: cw.ink, alpha: fade(t, 1.3) });
       if (D.range) {
         text(ctx, b, `Here's what we noticed, ${day(D.range.from)} to ${day(D.range.to)}.`, y + 20, {
           ...say(48), color: cw.soft, alpha: fade(t, 2.1),
@@ -1441,7 +1442,7 @@ function buildCards(D) {
     id: "summary", name: "Summary", ready: 0.7 + tiles.length * 0.25,
     alt: `Summary: ${p.name}. ${num(D.prompts)} prompts.`,
     head(ctx, t, fx, cw, b) {
-      const y = text(ctx, b, `My ${SPAN} with AI agents`, 0, { ...say(), color: cw.soft });
+      const y = text(ctx, b, `${D.name ? `${D.name}'s` : "My"} ${SPAN} with AI agents`, 0, { ...say(), color: cw.soft });
       text(ctx, b, p.name, y + 10, { family: "Geist", weight: 700, size: 92, color: cw.ink, lh: 1.05 });
     },
     visual(ctx, t, fx, cw, b) {
@@ -1742,10 +1743,11 @@ const postLinkedIn = document.getElementById("post-linkedin");
 const LEAVABLE = {
   chapters: "chapters", "top-typo": "topTypo", spellings: "spellings", slip: "slip", "top-prompts": "topPrompts", catchphrase: "catchphrase",
   talk: "talk", crashouts: "crashouts", night: "night", streak: "streak", agents: "agents", work: "work", shipped: "shipped", money: "money", letter: "letter",
+  name: "name",
 };
-// ids of the cards left out. Chapters say what you worked on, so they stay
-// out of a link unless you add them.
-const left = new Set(["chapters"]);
+// ids of what's left out. Chapters say what you worked on, and your name who
+// you are, so they stay out of a link unless you add them.
+const left = new Set(["chapters", "name"]);
 let link = "";
 let linkFor = 0; // ignores a slower, older link if the choice changed meanwhile
 
@@ -1756,7 +1758,11 @@ function sharedData() {
   return d;
 }
 
-const shareText = (d) => `My ${SPAN} with AI coding agents, wrapped. I'm ${d.personality.name}.`;
+// Someone else's story is passed on in the third person, named only if its owner shared their name.
+const shareText = (d) =>
+  SHARED
+    ? `${D.name ? `${D.name}'s` : "Someone's"} ${SPAN} with AI coding agents, wrapped: ${D.personality.name}.`
+    : `My ${SPAN} with AI coding agents, wrapped. I'm ${d.personality.name}.`;
 
 function finalFrame(card, s) {
   return withShape(s, () => {
@@ -1802,9 +1808,10 @@ async function renderShare() {
 
 function renderChoices() {
   const list = document.getElementById("choices");
+  // Your name isn't a card of its own, but leaves the link the same way.
+  const named = D.name ? [{ id: "name", name: "Your name" }] : [];
   list.replaceChildren(
-    ...cards
-      .filter((card) => card.id in LEAVABLE)
+    ...[...named, ...cards.filter((card) => card.id in LEAVABLE)]
       .map((card) => {
         const btn = document.createElement("button");
         btn.className = "chip";
@@ -1843,6 +1850,7 @@ function openShare() {
 // code and names it. Without the site, the long link still works.
 let short = { for: "", url: "" };
 async function shortLink() {
+  if (SHARED) return location.href; // the link it was opened from
   const mine = link;
   if (short.for === mine) return short.url;
   try {
@@ -1856,7 +1864,7 @@ async function shortLink() {
   }
 }
 
-document.getElementById("copy-link").addEventListener("click", async () => {
+for (const id of ["copy-link", "ending-copy"]) document.getElementById(id).addEventListener("click", async () => {
   const url = shortLink();
   try {
     // Handing the clipboard a promise keeps the click's permission to copy
@@ -1868,7 +1876,7 @@ document.getElementById("copy-link").addEventListener("click", async () => {
     }
     notify("Link copied. Paste it anywhere.");
   } catch {
-    notify("Couldn't copy the link. Try Share instead.");
+    notify(SHARED ? "Couldn't copy the link. Copy it from the address bar instead." : "Couldn't copy the link. Try Share instead.");
   }
 });
 
@@ -1885,9 +1893,13 @@ document.getElementById("share-link").addEventListener("click", async () => {
 
 // The post opens in a new tab straight away, so it isn't blocked, and moves
 // to the post once the short link is ready.
+const toX = (url) => `https://x.com/intent/post?text=${encodeURIComponent(shareText(sharedData()))}&url=${encodeURIComponent(url)}`;
+const toLinkedIn = (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
 for (const [el, post] of [
-  [postX, (url) => `https://x.com/intent/post?text=${encodeURIComponent(shareText(sharedData()))}&url=${encodeURIComponent(url)}`],
-  [postLinkedIn, (url) => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`],
+  [postX, toX],
+  [postLinkedIn, toLinkedIn],
+  [document.getElementById("ending-x"), toX],
+  [document.getElementById("ending-linkedin"), toLinkedIn],
 ]) {
   el.addEventListener("click", async (e) => {
     e.preventDefault();

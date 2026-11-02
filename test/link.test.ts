@@ -15,8 +15,8 @@ const chapters = [{ from: "2026-01", to: "2026-03", name: "Scanner app" }];
 
 test("a story comes out of its link exactly as it went in", () => {
   // A story from the CLI has every field; Shadev's was made before Cursor was read.
-  const full = { ...SHADEVS_STORY, agents: { ...SHADEVS_STORY.agents!, cursor: 0 } };
-  for (const story of [full, { ...full, chapters, talk: { ...full.talk!, nickname: null } }]) {
+  const full = { ...SHADEVS_STORY, agents: { ...SHADEVS_STORY.agents!, cursor: 0 }, name: null };
+  for (const story of [full, { ...full, chapters, talk: { ...full.talk!, nickname: null }, name: "Ada" }]) {
     // Through JSON, as the link does: a field the link lacks must not come back.
     assert.deepEqual(fromLink(JSON.parse(JSON.stringify(toLink(story)))), carried(story));
   }
@@ -24,9 +24,9 @@ test("a story comes out of its link exactly as it went in", () => {
 
 test("a link made before a field existed still reads, without that field", () => {
   const values = toLink(SHADEVS_STORY);
-  // `crashouts` is the newest field.
+  // `name` is the newest field.
   const older = fromLink(values.slice(0, -1));
-  assert.equal(older.crashouts, undefined);
+  assert.equal(older.name, undefined);
   assert.equal(older.period, SHADEVS_STORY.period);
 });
 

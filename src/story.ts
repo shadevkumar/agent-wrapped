@@ -36,6 +36,8 @@ export interface StoryData {
   period: Span | null; // "month" when made with --last-month; older stories and links have none
   // The swear word is starred out here, so the link never carries it whole.
   crashouts: { count: number; worstDay: { day: string; count: number } | null; word: string | null } | null;
+  // Your first name; older stories and links have none.
+  name?: string | null;
 }
 
 // Phrases everyone types; a catchphrase should sound like this person.
@@ -65,6 +67,7 @@ export function storyData(
   letter: Letter,
   chapterNames = w.chapters.map((c) => plainName(c.words)),
   span: Span = "year",
+  name: string | null = null,
 ): StoryData {
   const family = w.voice.typos.find((f) => f.spellings.length >= 5) ?? null;
   const streak = w.rhythm.longestStreak;
@@ -117,5 +120,6 @@ export function storyData(
       w.voice.crashouts.count >= CRASHOUTS
         ? { ...w.voice.crashouts, word: w.voice.crashouts.word && starred(w.voice.crashouts.word) }
         : null,
+    name,
   };
 }

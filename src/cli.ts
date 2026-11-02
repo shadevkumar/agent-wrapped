@@ -8,6 +8,7 @@ import { nameChapters } from "./chapters.ts";
 import { localDay } from "./files.ts";
 import { type Span, templateLetter, writeLetter } from "./letter.ts";
 import { computeWrapped } from "./moments.ts";
+import { firstName } from "./name.ts";
 import { pickPersonality } from "./personality.ts";
 import { bold, choose, dim, line, step } from "./screen.ts";
 import { readInBackground } from "./read-worker.ts";
@@ -96,7 +97,7 @@ const [letter, chapterNames] = await step(
 const dir = join(tmpdir(), "agent-wrapped");
 mkdirSync(dir, { recursive: true });
 const file = join(dir, `agent-wrapped-${localDay(new Date())}${span === "month" ? "-last-30-days" : ""}.html`);
-writeFileSync(file, buildHtml(storyData(wrapped, personality, letter, chapterNames, span)));
+writeFileSync(file, buildHtml(storyData(wrapped, personality, letter, chapterNames, span, firstName(home))));
 
 const hours = wrapped.totals.agentHours >= 1 ? `, ${n(wrapped.totals.agentHours)} hours of agent work` : "";
 line();

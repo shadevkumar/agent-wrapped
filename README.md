@@ -20,6 +20,7 @@ Nothing is uploaded unless you share. The story is one HTML file written to your
 - **Nothing is shared until you share it.** When you share, the site saves what's on your cards so the link can be short. Your prompts and logs never leave your computer. If the site can't be reached, you get a long link that carries the story inside it instead. Anyone you give the link to can watch it.
 - **You see the story before you share it,** and a card you leave out is not in the link at all.
 - **Your year in chapters** splits your year into stretches, each named from the everyday words that set it apart, found on your computer. Words that could be a person's or a private name are left out. Your `claude` command turns those few words into short names; it never sees a prompt. Chapters say what you worked on, so they are left out of a share link unless you add them. With `--no-ai`, a chapter is named by its top words.
+- **Your first name** opens your story and heads its summary card. It is left out of a share link unless you add it.
 - **The letter** is written by your own `claude` command, if you have one. It gets your numbers and a few quotes that passed the same privacy check as the cards, never your prompts or logs. It doesn't save a session or load any project files. Run with `--no-ai` to use a template letter instead.
 
 ## What it reads
@@ -29,10 +30,12 @@ Nothing is uploaded unless you share. The story is one HTML file written to your
 | Claude Code | `~/.claude/history.jsonl` | the prompts you typed |
 | Claude Code | `~/.claude/projects/**/*.jsonl` | token use, how long each request took, and when the agent ran tests, made a commit, edited a file or was stopped |
 | Claude Code | `~/.claude/stats-cache.json` | older token totals |
+| Claude Code | `~/.claude.json` | the first word of your account's name |
 | Codex | `~/.codex/thread_history_*.sqlite` | the prompts you typed, how long each request took, and the same tests, commits, edits and stops |
 | Codex | `~/.codex/state_*.sqlite` | token totals per thread |
 | Codex | `~/.codex/sessions/**/*.jsonl` | token splits for recent threads |
 | Cursor | `~/.cursor/projects/*/agent-transcripts/*/*.jsonl` | the prompts you typed to Cursor's agent, and the same tests, commits and edits |
+| Git | `git config --global user.name` | the first word of your name, when your Claude account has none |
 
 Everything is opened read-only. For what the agents did, only the kind is kept (a test run, a commit, a push, a pull request, a deploy, a stop) and, for an edit, the file type: never a command, a file name or any output. Cursor doesn't log tokens or how long its agent worked, so Cursor adds prompts and work but no hours or cost. Claude Code deletes full transcripts after about 30 days, so older Claude token use and work can be missing. The prompts themselves go back further.
 
