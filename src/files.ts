@@ -5,9 +5,8 @@ import type { Coverage, Agent } from "./types.ts";
 // Parse a JSONL file, skipping malformed lines. A missing file is empty.
 // `keep` skips decoding lines that can't matter, which is most of a big log.
 export function readJsonl(path: string, keep?: (line: string) => boolean): Record<string, any>[] {
-  if (!existsSync(path)) return [];
   const rows: Record<string, any>[] = [];
-  for (const line of readFileSync(path, "utf8").split("\n")) {
+  for (const line of linesOf(path)) {
     if (!line.trim() || (keep && !keep(line))) continue;
     try {
       const row = JSON.parse(line);
@@ -59,14 +58,28 @@ export function lastJsonLine(
   }
 }
 
-// The first line containing `needle` that parses and passes `accept`, read
-// from the start a chunk at a time.
+// The first line containing `needle` that parses and passes `accept`.
 export function firstJsonLine(
   path: string,
   needle: string,
   accept: (row: Record<string, any>) => boolean,
 ): Record<string, any> | null {
-  if (!existsSync(path)) return null;
+  for (const line of linesOf(path)) {
+    if (!line.includes(needle)) continue;
+    try {
+      const row = JSON.parse(line);
+      if (row && accept(row)) return row;
+    } catch {
+      // A malformed line; keep looking.
+    }
+  }
+  return null;
+}
+
+// A file's lines, read from the start a chunk at a time, so a log of any size
+// fits in memory: Node can't hold more than about 512 MB as one string.
+function* linesOf(path: string): Generator<string> {
+  if (!existsSync(path)) return;
   const fd = openSync(path, "r");
   try {
     const chunk = 1 << 20;
@@ -79,18 +92,9 @@ export function firstJsonLine(
       // A line cut at the chunk edge waits for the next read. Split on bytes,
       // so a character cut in half is never decoded.
       const end = at + buf.length >= size ? data.length : data.lastIndexOf(0x0a) + 1;
-      for (const line of data.subarray(0, end).toString("utf8").split("\n")) {
-        if (!line.includes(needle)) continue;
-        try {
-          const row = JSON.parse(line);
-          if (row && accept(row)) return row;
-        } catch {
-          // A malformed line; keep looking.
-        }
-      }
+      yield* data.subarray(0, end).toString("utf8").split("\n");
       rest = data.subarray(end);
     }
-    return null;
   } finally {
     closeSync(fd);
   }
