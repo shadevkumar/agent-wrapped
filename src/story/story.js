@@ -990,21 +990,22 @@ function buildCards(D) {
       alt: `Your year in chapters: ${list.map((c) => `${months(c)}, ${c.name}`).join("; ")}.`,
       head: (ctx, t, fx, cw, b) => text(ctx, b, "Your year in chapters", 0, { ...big(70), color: cw.ink }),
       visual(ctx, t, fx, cw, b) {
-        // One text size for every row: the largest the longest name fits at.
+        // One text size for every row: the largest the longest name fits at,
+        // down to 30. A name still too long takes two lines.
         const right = (c) => ({ text: months(c), size: 34, family: "Geist", weight: 400 });
-        const size = Math.min(
-          ...list.map((c) => {
-            const room = b.w - 100 - textWidth(ctx, right(c).text, 36, right(c));
-            return clamp((40 * room) / textWidth(ctx, c.name, 40, { family: "Geist", weight: 500 }), 26, 40);
-          }),
-        );
+        const name = { family: "Geist", weight: 500 };
+        const room = (c) => b.w - 100 - textWidth(ctx, right(c).text, 36, right(c));
+        const size = Math.min(...list.map((c) => clamp((40 * room(c)) / textWidth(ctx, c.name, 40, name), 30, 40)));
         list.forEach((c, i) => {
           const at = 0.6 + i * 0.35;
           fx.key(at);
           const local = REDUCED ? 9 : t - at;
           if (local < 0) return;
-          const label = { text: c.name, size, family: "Geist", weight: 500 };
-          cap(ctx, b.x + b.w / 2, 70 + i * 160, b.w * easeOut(local / 0.5), 120, "", { ...cw, left: true, lines: [label], right: right(c), press: pressAt(local) });
+          ctx.save();
+          ctx.font = font(size, name);
+          const lines = wrap(ctx, c.name, room(c)).slice(0, 2).map((text) => ({ text, size, ...name }));
+          ctx.restore();
+          cap(ctx, b.x + b.w / 2, 70 + i * 160, b.w * easeOut(local / 0.5), 120, "", { ...cw, left: true, lines, right: right(c), press: pressAt(local) });
         });
       },
       words: (ctx, t, fx, cw, b) =>
